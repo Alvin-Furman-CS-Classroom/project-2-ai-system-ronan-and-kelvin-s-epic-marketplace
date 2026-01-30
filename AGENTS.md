@@ -1,12 +1,19 @@
 ## Project Context
 
-- System title: [Your System Title]
-- Theme: [Your Theme]
-- Proposal link or summary: [Your Proposal Link or Summary]
+- System title: Epic Marketplace
+- Theme: Small business marketplace search with search, NLP, and supervised ranking
+- Proposal link or summary: See `PROPOSAL.md`
 
 **Module plan:**
 
-[Your Module Plan Table copied from README.md]
+| Module | Topic(s) | Inputs | Outputs | Depends On | Checkpoint |
+| ------ | -------- | ------ | ------- | ---------- | ---------- |
+| 1: Candidate Retrieval | Uninformed/Informed Search | Filters, catalog | Candidate IDs | Search unit | Checkpoint 1 — Feb 11 |
+| 2: Heuristic Re-ranking | Advanced Search | Candidate IDs, product/query features | Ranked candidates | Module 1 | Checkpoint 2 — Feb 26 |
+| 3: Query Understanding | NLP before LLMs | Query text | Keywords, embedding, inferred category | Module 1 | Checkpoint 3 — Mar 19 |
+| 4: Learning-to-Rank | Supervised Learning | Ranked candidates, features, labels | Final scores | Modules 2-3 | Checkpoint 4 — Apr 2 |
+| 5: Evaluation & Output | Evaluation Metrics | Final scores, held-out data | Top-k payload, metrics | Module 4 | Checkpoint 5 — Apr 16 |
+| 6 (optional) |  |  |  |  |  |
 
 ## Constraints
 
