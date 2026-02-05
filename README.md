@@ -125,6 +125,21 @@ pip install -r requirements.txt
 **Dependencies:**
 - `pytest>=7.0.0` — Testing framework
 
+## Data Source
+
+This project uses the Amazon Reviews'23 dataset (Electronics subset) for local development.
+Full Electronics files live in `datasets/active/` and are ignored by git:
+- `Electronics.jsonl.gz`
+- `meta_Electronics.jsonl.gz`
+
+A smaller, commit-friendly sample lives in `datasets/working_set/`:
+- `Electronics.jsonl.gz`
+- `meta_Electronics.jsonl.gz`
+
+Other category files can be stored in `datasets/ignored/` and are excluded from git.
+
+Source: https://amazon-reviews-2023.github.io/
+
 ## Running
 
 ```bash
