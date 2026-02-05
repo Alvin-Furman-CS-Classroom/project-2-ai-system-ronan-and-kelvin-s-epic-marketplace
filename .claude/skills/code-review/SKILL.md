@@ -1,49 +1,74 @@
-# AI System Code Review (Rubric-Based)
+# Code Review Skill
 
-Use this skill to review the project against the AI System rubric and provide actionable feedback before each checkpoint.
+## Purpose
 
-## Required Inputs
+Review code against the project rubric to identify gaps before checkpoint submission.
 
-- Repository context (current module spec, recent changes, test results).
-- Elegance Rubric: https://csc-343.path.app/rubrics/code-elegance.rubric.md
-- AI System Rubric: https://csc-343.path.app/projects/project-2-ai-system/ai-system.rubric.md
+## Rubric Criteria
 
-## Review Process
+Based on the [Code Elegance Rubric](https://csc-343.path.app/rubrics/code-elegance.rubric.md):
 
-1. Identify the module(s) included in the current checkpoint.
-2. Read the module spec and README updates.
-3. Inspect implementation, tests, and documentation.
-4. Score each rubric criterion with short justification.
-5. List concrete fixes or improvements needed before submission.
+### 1. Clarity & Readability
+- [ ] Code is well-organized with clear naming conventions
+- [ ] Functions/methods have docstrings explaining purpose, args, and returns
+- [ ] Complex logic has inline comments
+- [ ] Consistent formatting throughout
 
-## Output Format
+### 2. Modularity
+- [ ] Single responsibility principle: each function does one thing
+- [ ] Code is organized into logical modules/files
+- [ ] No duplicate code (DRY principle)
+- [ ] Clear separation between data, logic, and I/O
 
-### Summary
+### 3. Correctness
+- [ ] All unit tests pass
+- [ ] Integration tests pass (where applicable)
+- [ ] Edge cases are handled
+- [ ] Input validation is present
 
-One short paragraph describing overall readiness.
+### 4. Efficiency
+- [ ] Appropriate data structures used
+- [ ] No unnecessary loops or computations
+- [ ] Time/space complexity is reasonable for the problem
 
-### Rubric Scores
+### 5. Testability
+- [ ] Unit tests exist for each module
+- [ ] Tests cover happy path and edge cases
+- [ ] Test fixtures are reusable
+- [ ] Integration tests demonstrate module interactions
 
-Provide a score and justification for each criterion in the rubric.
+## How to Use This Skill
 
-### Findings
+1. Run this skill after implementing a module
+2. Check each criterion against the code
+3. List any gaps found
+4. Fix gaps before checkpoint submission
 
-List issues by severity (critical, major, minor). Each finding must include:
+## Review Checklist by Module
 
-- Evidence (file paths, function names, or README sections)
-- Impact on rubric scoring
-- Suggested fix
+### Module 1: Candidate Retrieval
+- [ ] SearchFilters validates inputs
+- [ ] ProductCatalog supports all required operations
+- [ ] CandidateRetrieval implements multiple search strategies
+- [ ] All strategies return correct results (100% recall for matches)
+- [ ] Unit tests cover filters, catalog, and retrieval
 
-### Action Items
+### Module 2: Heuristic Re-ranking
+- [ ] Scoring function is documented
+- [ ] Heuristic weights are configurable
+- [ ] Integration test with Module 1 output
 
-Checklist of next steps to address issues.
+### Module 3: Query Understanding
+- [ ] Keyword extraction is tested
+- [ ] Embeddings have correct shape
+- [ ] Category inference has baseline accuracy
 
-### Questions
+### Module 4: Learning-to-Rank
+- [ ] Model training is reproducible
+- [ ] Feature extraction is documented
+- [ ] NDCG improvement is measured
 
-Any missing information needed to finalize the review.
-
-## Style Guidelines
-
-- Cite evidence from the repository.
-- Be concise and direct.
-- Prefer clear, actionable feedback over general advice.
+### Module 5: Evaluation & Output
+- [ ] Metrics are correctly computed
+- [ ] Output schema matches spec
+- [ ] Results are reproducible

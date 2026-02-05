@@ -13,3 +13,10 @@ build/
 *.log
 .idea/
 .vscode/
+datasets/ignored/
+datasets/active/
+datasets/**/*.jsonl.gz
+!datasets/working_set/
+!datasets/working_set/**
+!datasets/working_set/Electronics.jsonl.gz
+!datasets/working_set/meta_Electronics.jsonl.gz
