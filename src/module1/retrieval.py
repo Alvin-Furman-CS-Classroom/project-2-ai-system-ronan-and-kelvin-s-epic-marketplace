@@ -2,12 +2,12 @@
 Candidate retrieval using search algorithms.
 
 Implements uninformed (BFS/DFS) and informed (A*-style priority) search
-to find products matching hard constraints.
+to find products matching hard constraints, with optional result sorting.
 """
 
 from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional, Set, Callable
+from typing import List, Optional, Set
 import heapq
 
 from .filters import SearchFilters
@@ -37,12 +37,14 @@ class CandidateRetrieval:
     - DFS-style depth-first filtering  
     - Priority-based informed search (A*-style with heuristics)
     
+    Supports sorting results by price or seller rating.
+    
     Example:
         >>> catalog = ProductCatalog(products)
         >>> retrieval = CandidateRetrieval(catalog)
-        >>> filters = SearchFilters(price_min=10, price_max=40, category="home")
+        >>> filters = SearchFilters(price_min=10, price_max=40, category="Computers", sort_by="price_asc")
         >>> candidates = retrieval.search(filters)
-        >>> print(candidates)  # ["p12", "p89", "p203"]
+        >>> print(candidates)  # ["B08GFTPQ5B", "B07BJ7ZZL7"]  (sorted by price)
     """
     
     def __init__(self, catalog: ProductCatalog):
@@ -81,12 +83,48 @@ class CandidateRetrieval:
             if product.seller_rating < filters.min_seller_rating:
                 return False
         
-        # Location check (case-insensitive)
-        if filters.location is not None:
-            if product.location.lower() != filters.location.lower():
+        # Store check (case-insensitive)
+        if filters.store is not None:
+            if product.store.lower() != filters.store.lower():
                 return False
         
         return True
+    
+    def _sort_candidates(self, candidate_ids: List[str], sort_by: str) -> List[str]:
+        """
+        Sort candidate IDs by the given sort criterion.
+        
+        Args:
+            candidate_ids: List of product IDs to sort.
+            sort_by: Sort key — "price_asc", "price_desc",
+                     "rating_desc", or "rating_asc".
+        
+        Returns:
+            Sorted list of product IDs.
+        """
+        if sort_by == "price_asc":
+            return sorted(
+                candidate_ids,
+                key=lambda pid: self.catalog[pid].price,
+            )
+        elif sort_by == "price_desc":
+            return sorted(
+                candidate_ids,
+                key=lambda pid: self.catalog[pid].price,
+                reverse=True,
+            )
+        elif sort_by == "rating_desc":
+            return sorted(
+                candidate_ids,
+                key=lambda pid: self.catalog[pid].seller_rating,
+                reverse=True,
+            )
+        elif sort_by == "rating_asc":
+            return sorted(
+                candidate_ids,
+                key=lambda pid: self.catalog[pid].seller_rating,
+            )
+        return candidate_ids
     
     def search(
         self,
@@ -98,26 +136,36 @@ class CandidateRetrieval:
         Search for candidate products matching filters.
         
         Args:
-            filters: The search filters (hard constraints).
+            filters: The search filters (hard constraints + optional sort).
             strategy: Search strategy - "linear", "bfs", "dfs", or "priority".
             max_results: Maximum number of results to return. None for all.
         
         Returns:
-            List of product IDs that match the filters.
+            List of product IDs that match the filters, optionally sorted.
         
         Raises:
             ValueError: If strategy is not recognized.
         """
         if strategy == "linear":
-            return self._linear_search(filters, max_results)
+            candidates = self._linear_search(filters, max_results=None)
         elif strategy == "bfs":
-            return self._bfs_search(filters, max_results)
+            candidates = self._bfs_search(filters, max_results=None)
         elif strategy == "dfs":
-            return self._dfs_search(filters, max_results)
+            candidates = self._dfs_search(filters, max_results=None)
         elif strategy == "priority":
-            return self._priority_search(filters, max_results)
+            candidates = self._priority_search(filters, max_results=None)
         else:
             raise ValueError(f"Unknown search strategy: {strategy}")
+        
+        # Apply sorting if requested
+        if filters.sort_by is not None:
+            candidates = self._sort_candidates(candidates, filters.sort_by)
+        
+        # Apply max_results after sorting
+        if max_results is not None:
+            candidates = candidates[:max_results]
+        
+        return candidates
     
     def _linear_search(
         self,
@@ -278,10 +326,10 @@ class CandidateRetrieval:
             if product.seller_rating < filters.min_seller_rating:
                 priority += (filters.min_seller_rating - product.seller_rating) * 10
         
-        # Penalize if location doesn't match
-        if filters.location is not None:
-            if product.location.lower() != filters.location.lower():
-                priority += 50  # Moderate penalty for wrong location
+        # Penalize if store doesn't match
+        if filters.store is not None:
+            if product.store.lower() != filters.store.lower():
+                priority += 75  # Significant penalty for wrong store
         
         return priority
     

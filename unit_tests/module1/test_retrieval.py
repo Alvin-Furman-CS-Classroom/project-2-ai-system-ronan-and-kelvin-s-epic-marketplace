@@ -15,16 +15,16 @@ class TestCandidateRetrieval:
     def sample_catalog(self):
         """Sample product catalog for testing."""
         products = [
-            Product(id="p1", title="Ceramic Mug", price=18.0, category="home", seller_rating=4.8, location="Boston"),
-            Product(id="p2", title="Glass Vase", price=35.0, category="home", seller_rating=4.5, location="Boston"),
-            Product(id="p3", title="Wooden Bowl", price=45.0, category="home", seller_rating=4.2, location="NYC"),
-            Product(id="p4", title="Metal Lamp", price=60.0, category="home", seller_rating=4.9, location="Boston"),
-            Product(id="p5", title="Phone Case", price=15.0, category="electronics", seller_rating=4.0, location="LA"),
-            Product(id="p6", title="USB Cable", price=8.0, category="electronics", seller_rating=3.8, location="Boston"),
-            Product(id="p7", title="Headphones", price=50.0, category="electronics", seller_rating=4.7, location="NYC"),
-            Product(id="p8", title="Plant Pot", price=22.0, category="home", seller_rating=4.6, location="Boston"),
-            Product(id="p9", title="Candle Set", price=28.0, category="home", seller_rating=4.4, location="LA"),
-            Product(id="p10", title="Picture Frame", price=12.0, category="home", seller_rating=4.1, location="Boston"),
+            Product(id="p1", title="Ceramic Mug", price=18.0, category="home", seller_rating=4.8, store="StoreA"),
+            Product(id="p2", title="Glass Vase", price=35.0, category="home", seller_rating=4.5, store="StoreA"),
+            Product(id="p3", title="Wooden Bowl", price=45.0, category="home", seller_rating=4.2, store="StoreB"),
+            Product(id="p4", title="Metal Lamp", price=60.0, category="home", seller_rating=4.9, store="StoreA"),
+            Product(id="p5", title="Phone Case", price=15.0, category="electronics", seller_rating=4.0, store="StoreC"),
+            Product(id="p6", title="USB Cable", price=8.0, category="electronics", seller_rating=3.8, store="StoreA"),
+            Product(id="p7", title="Headphones", price=50.0, category="electronics", seller_rating=4.7, store="StoreB"),
+            Product(id="p8", title="Plant Pot", price=22.0, category="home", seller_rating=4.6, store="StoreA"),
+            Product(id="p9", title="Candle Set", price=28.0, category="home", seller_rating=4.4, store="StoreC"),
+            Product(id="p10", title="Picture Frame", price=12.0, category="home", seller_rating=4.1, store="StoreA"),
         ]
         return ProductCatalog(products)
     
@@ -91,22 +91,22 @@ class TestMatchesFilters(TestCandidateRetrieval):
         product = sample_catalog["p1"]  # rating=4.8
         assert retrieval.matches_filters(product, filters) is False
     
-    def test_matches_location(self, retrieval, sample_catalog):
-        """Product should match when location matches."""
-        filters = SearchFilters(location="Boston")
-        product = sample_catalog["p1"]  # location="Boston"
+    def test_matches_store(self, retrieval, sample_catalog):
+        """Product should match when store matches."""
+        filters = SearchFilters(store="StoreA")
+        product = sample_catalog["p1"]  # store="StoreA"
         assert retrieval.matches_filters(product, filters) is True
     
-    def test_not_matches_location(self, retrieval, sample_catalog):
-        """Product should not match when location differs."""
-        filters = SearchFilters(location="LA")
-        product = sample_catalog["p1"]  # location="Boston"
+    def test_not_matches_store(self, retrieval, sample_catalog):
+        """Product should not match when store differs."""
+        filters = SearchFilters(store="StoreB")
+        product = sample_catalog["p1"]  # store="StoreA"
         assert retrieval.matches_filters(product, filters) is False
     
-    def test_matches_location_case_insensitive(self, retrieval, sample_catalog):
-        """Location matching should be case-insensitive."""
-        filters = SearchFilters(location="BOSTON")
-        product = sample_catalog["p1"]  # location="Boston"
+    def test_matches_store_case_insensitive(self, retrieval, sample_catalog):
+        """Store matching should be case-insensitive."""
+        filters = SearchFilters(store="storea")
+        product = sample_catalog["p1"]  # store="StoreA"
         assert retrieval.matches_filters(product, filters) is True
     
     def test_matches_all_filters(self, retrieval, sample_catalog):
@@ -116,9 +116,9 @@ class TestMatchesFilters(TestCandidateRetrieval):
             price_max=40.0,
             category="home",
             min_seller_rating=4.5,
-            location="Boston"
+            store="StoreA",
         )
-        product = sample_catalog["p1"]  # price=18, home, 4.8, Boston
+        product = sample_catalog["p1"]  # price=18, home, 4.8, StoreA
         assert retrieval.matches_filters(product, filters) is True
     
     def test_not_matches_one_filter_fails(self, retrieval, sample_catalog):
@@ -126,9 +126,8 @@ class TestMatchesFilters(TestCandidateRetrieval):
         filters = SearchFilters(
             price_min=10.0,
             price_max=40.0,
-            category="home",
+            category="electronics",  # p1 is home
             min_seller_rating=4.5,
-            location="LA"  # p1 is in Boston
         )
         product = sample_catalog["p1"]
         assert retrieval.matches_filters(product, filters) is False
@@ -139,34 +138,108 @@ class TestSearchStrategies(TestCandidateRetrieval):
     
     def test_linear_search(self, retrieval):
         """Linear search should find all matching products."""
-        filters = SearchFilters(category="home", location="Boston")
+        filters = SearchFilters(category="home", min_seller_rating=4.5)
         candidates = retrieval.search(filters, strategy="linear")
-        # p1, p2, p4, p8, p10 are home+Boston
-        assert set(candidates) == {"p1", "p2", "p4", "p8", "p10"}
+        assert set(candidates) == {"p1", "p2", "p4", "p8"}
     
     def test_bfs_search(self, retrieval):
         """BFS search should find all matching products."""
-        filters = SearchFilters(category="home", location="Boston")
+        filters = SearchFilters(category="home", min_seller_rating=4.5)
         candidates = retrieval.search(filters, strategy="bfs")
-        assert set(candidates) == {"p1", "p2", "p4", "p8", "p10"}
+        assert set(candidates) == {"p1", "p2", "p4", "p8"}
     
     def test_dfs_search(self, retrieval):
         """DFS search should find all matching products."""
-        filters = SearchFilters(category="home", location="Boston")
+        filters = SearchFilters(category="home", min_seller_rating=4.5)
         candidates = retrieval.search(filters, strategy="dfs")
-        assert set(candidates) == {"p1", "p2", "p4", "p8", "p10"}
+        assert set(candidates) == {"p1", "p2", "p4", "p8"}
     
     def test_priority_search(self, retrieval):
         """Priority search should find all matching products."""
-        filters = SearchFilters(category="home", location="Boston")
+        filters = SearchFilters(category="home", min_seller_rating=4.5)
         candidates = retrieval.search(filters, strategy="priority")
-        assert set(candidates) == {"p1", "p2", "p4", "p8", "p10"}
+        assert set(candidates) == {"p1", "p2", "p4", "p8"}
     
     def test_invalid_strategy(self, retrieval):
         """Should raise ValueError for unknown strategy."""
         filters = SearchFilters()
         with pytest.raises(ValueError, match="Unknown search strategy"):
             retrieval.search(filters, strategy="invalid")
+    
+    def test_store_filter(self, retrieval):
+        """Should filter by store."""
+        filters = SearchFilters(store="StoreB")
+        candidates = retrieval.search(filters)
+        assert set(candidates) == {"p3", "p7"}
+    
+    def test_store_and_category_filter(self, retrieval):
+        """Should combine store + category filters."""
+        filters = SearchFilters(store="StoreA", category="electronics")
+        candidates = retrieval.search(filters)
+        assert set(candidates) == {"p6"}
+
+
+class TestSorting(TestCandidateRetrieval):
+    """Tests for search result sorting."""
+    
+    def test_sort_price_asc(self, retrieval):
+        """Should sort results by price ascending."""
+        filters = SearchFilters(category="home", sort_by="price_asc")
+        candidates = retrieval.search(filters)
+        prices = [retrieval.catalog[pid].price for pid in candidates]
+        assert prices == sorted(prices)
+    
+    def test_sort_price_desc(self, retrieval):
+        """Should sort results by price descending."""
+        filters = SearchFilters(category="home", sort_by="price_desc")
+        candidates = retrieval.search(filters)
+        prices = [retrieval.catalog[pid].price for pid in candidates]
+        assert prices == sorted(prices, reverse=True)
+    
+    def test_sort_rating_desc(self, retrieval):
+        """Should sort results by seller rating descending."""
+        filters = SearchFilters(category="home", sort_by="rating_desc")
+        candidates = retrieval.search(filters)
+        ratings = [retrieval.catalog[pid].seller_rating for pid in candidates]
+        assert ratings == sorted(ratings, reverse=True)
+    
+    def test_sort_rating_asc(self, retrieval):
+        """Should sort results by seller rating ascending."""
+        filters = SearchFilters(category="home", sort_by="rating_asc")
+        candidates = retrieval.search(filters)
+        ratings = [retrieval.catalog[pid].seller_rating for pid in candidates]
+        assert ratings == sorted(ratings)
+    
+    def test_sort_with_max_results(self, retrieval):
+        """Sorting + max_results should return top N sorted results."""
+        filters = SearchFilters(category="home", sort_by="price_asc")
+        candidates = retrieval.search(filters, max_results=3)
+        assert len(candidates) == 3
+        prices = [retrieval.catalog[pid].price for pid in candidates]
+        # Should be the 3 cheapest home products
+        assert prices == sorted(prices)
+        assert prices[-1] <= 28.0  # 3rd cheapest home product
+    
+    def test_sort_price_asc_values(self, retrieval):
+        """Verify exact sort order for price_asc on electronics."""
+        filters = SearchFilters(category="electronics", sort_by="price_asc")
+        candidates = retrieval.search(filters)
+        prices = [retrieval.catalog[pid].price for pid in candidates]
+        assert prices == [8.0, 15.0, 50.0]
+    
+    def test_sort_rating_desc_values(self, retrieval):
+        """Verify exact sort order for rating_desc on electronics."""
+        filters = SearchFilters(category="electronics", sort_by="rating_desc")
+        candidates = retrieval.search(filters)
+        ratings = [retrieval.catalog[pid].seller_rating for pid in candidates]
+        assert ratings == [4.7, 4.0, 3.8]
+    
+    def test_no_sort_returns_search_order(self, retrieval):
+        """Without sort_by, results should come in search order."""
+        filters = SearchFilters(category="electronics")
+        candidates = retrieval.search(filters)
+        # Just check we get the right set (order depends on strategy)
+        assert set(candidates) == {"p5", "p6", "p7"}
 
 
 class TestSearchWithMaxResults(TestCandidateRetrieval):
@@ -221,18 +294,17 @@ class TestSearchRecall(TestCandidateRetrieval):
             price_max=40.0,
             category="home",
             min_seller_rating=4.5,
-            location="Boston"
         )
         candidates = retrieval.search(filters)
-        # p1: 18, home, 4.8, Boston ✓
-        # p2: 35, home, 4.5, Boston ✓
-        # p8: 22, home, 4.6, Boston ✓
+        # p1: 18, home, 4.8 ✓
+        # p2: 35, home, 4.5 ✓
+        # p8: 22, home, 4.6 ✓
         expected = {"p1", "p2", "p8"}
         assert set(candidates) == expected
     
     def test_empty_result_when_no_matches(self, retrieval):
         """Should return empty list when no products match."""
-        filters = SearchFilters(category="furniture")  # No furniture in catalog
+        filters = SearchFilters(category="furniture")
         candidates = retrieval.search(filters)
         assert candidates == []
 

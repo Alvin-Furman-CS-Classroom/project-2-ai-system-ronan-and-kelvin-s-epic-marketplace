@@ -4,7 +4,7 @@ Product catalog for the marketplace.
 Defines Product and ProductCatalog classes for storing and accessing products.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Iterator
 
 
@@ -14,23 +14,26 @@ class Product:
     A product in the marketplace catalog.
     
     Attributes:
-        id: Unique product identifier (e.g., "p12").
+        id: Unique product identifier (ASIN from Amazon dataset).
         title: Product title/name.
         price: Product price in dollars.
-        category: Product category (e.g., "home", "electronics").
-        seller_rating: Seller's rating (0-5 scale).
-        location: Seller's location (e.g., "Boston").
+        category: Product main category (e.g., "Computers", "Cell Phones & Accessories").
+        seller_rating: Seller's average rating (0-5 scale), computed from reviews.
+        store: Seller/store name (e.g., "Anker", "Amazon Basics").
         description: Optional product description.
-        tags: Optional list of product tags.
+        tags: Optional list of product tags/categories.
+        image_url: Optional product image URL.
+        rating_number: Optional number of ratings the product has.
+        features: Optional list of product feature bullet points.
     
     Example:
         >>> product = Product(
-        ...     id="p12",
-        ...     title="Handmade Ceramic Mug",
-        ...     price=18.0,
-        ...     category="home",
-        ...     seller_rating=4.8,
-        ...     location="Boston"
+        ...     id="B07BJ7ZZL7",
+        ...     title="Silicone Watch Band",
+        ...     price=14.89,
+        ...     category="Cell Phones & Accessories",
+        ...     seller_rating=4.4,
+        ...     store="QGHXO"
         ... )
     """
     
@@ -39,9 +42,12 @@ class Product:
     price: float
     category: str
     seller_rating: float
-    location: str
+    store: str
     description: Optional[str] = None
     tags: Optional[List[str]] = None
+    image_url: Optional[str] = None
+    rating_number: Optional[int] = None
+    features: Optional[List[str]] = None
     
     def __post_init__(self):
         """Validate product attributes."""
@@ -59,9 +65,90 @@ class Product:
             price=float(data["price"]),
             category=data["category"],
             seller_rating=float(data["seller_rating"]),
-            location=data["location"],
+            store=data["store"],
             description=data.get("description"),
-            tags=data.get("tags")
+            tags=data.get("tags"),
+            image_url=data.get("image_url"),
+            rating_number=data.get("rating_number"),
+            features=data.get("features"),
+        )
+    
+    @classmethod
+    def from_amazon_meta(
+        cls,
+        meta: dict,
+        seller_rating: Optional[float] = None
+    ) -> Optional["Product"]:
+        """
+        Create a Product from an Amazon metadata record.
+        
+        Args:
+            meta: Raw metadata dict from meta_Electronics JSONL.
+            seller_rating: Pre-computed seller rating (from reviews).
+                           Falls back to average_rating if not provided.
+        
+        Returns:
+            Product instance, or None if required fields are missing.
+        """
+        price = meta.get("price")
+        title = meta.get("title")
+        parent_asin = meta.get("parent_asin")
+        
+        # Skip if missing required fields
+        if price is None or title is None or parent_asin is None:
+            return None
+        
+        try:
+            price = float(price)
+        except (ValueError, TypeError):
+            return None
+        
+        if price <= 0:
+            return None
+        
+        # Use seller_rating if provided, else fall back to average_rating
+        rating = seller_rating if seller_rating is not None else meta.get("average_rating", 0)
+        try:
+            rating = float(rating)
+            rating = max(0.0, min(5.0, rating))
+        except (ValueError, TypeError):
+            rating = 0.0
+        
+        # Extract first image URL
+        images = meta.get("images", [])
+        image_url = None
+        if images and isinstance(images, list) and len(images) > 0:
+            first_img = images[0]
+            image_url = (
+                first_img.get("large")
+                or first_img.get("hi_res")
+                or first_img.get("thumb")
+            )
+        
+        # Build description from description list
+        desc_parts = meta.get("description", [])
+        description = " ".join(desc_parts) if isinstance(desc_parts, list) and desc_parts else None
+        
+        # Categories as tags
+        categories = meta.get("categories", [])
+        tags = categories if isinstance(categories, list) else None
+        
+        # Features
+        features = meta.get("features", [])
+        features = features if isinstance(features, list) and features else None
+        
+        return cls(
+            id=parent_asin,
+            title=title,
+            price=price,
+            category=meta.get("main_category") or "Unknown",
+            seller_rating=rating,
+            store=meta.get("store", "Unknown"),
+            description=description,
+            tags=tags,
+            image_url=image_url,
+            rating_number=meta.get("rating_number"),
+            features=features,
         )
     
     def to_dict(self) -> dict:
@@ -72,12 +159,18 @@ class Product:
             "price": self.price,
             "category": self.category,
             "seller_rating": self.seller_rating,
-            "location": self.location
+            "store": self.store,
         }
         if self.description is not None:
             result["description"] = self.description
         if self.tags is not None:
             result["tags"] = self.tags
+        if self.image_url is not None:
+            result["image_url"] = self.image_url
+        if self.rating_number is not None:
+            result["rating_number"] = self.rating_number
+        if self.features is not None:
+            result["features"] = self.features
         return result
 
 
@@ -135,6 +228,16 @@ class ProductCatalog:
     def product_ids(self) -> List[str]:
         """Return a list of all product IDs."""
         return list(self._products.keys())
+    
+    @property
+    def categories(self) -> List[str]:
+        """Return sorted list of unique categories in the catalog."""
+        return sorted({p.category for p in self._products.values() if p.category})
+    
+    @property
+    def stores(self) -> List[str]:
+        """Return sorted list of unique store names in the catalog."""
+        return sorted({p.store for p in self._products.values() if p.store})
     
     @classmethod
     def from_list(cls, products_data: List[dict]) -> "ProductCatalog":

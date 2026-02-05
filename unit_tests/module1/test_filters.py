@@ -3,7 +3,7 @@ Unit tests for SearchFilters.
 """
 
 import pytest
-from src.module1.filters import SearchFilters
+from src.module1.filters import SearchFilters, SORT_OPTIONS
 
 
 class TestSearchFilters:
@@ -16,7 +16,8 @@ class TestSearchFilters:
         assert filters.price_max is None
         assert filters.category is None
         assert filters.min_seller_rating is None
-        assert filters.location is None
+        assert filters.store is None
+        assert filters.sort_by is None
     
     def test_filter_with_price_range(self):
         """Should accept valid price range."""
@@ -29,15 +30,17 @@ class TestSearchFilters:
         filters = SearchFilters(
             price_min=10.0,
             price_max=40.0,
-            category="home",
-            min_seller_rating=4.5,
-            location="Boston"
+            category="Computers",
+            min_seller_rating=4.0,
+            store="Anker",
+            sort_by="price_asc",
         )
         assert filters.price_min == 10.0
         assert filters.price_max == 40.0
-        assert filters.category == "home"
-        assert filters.min_seller_rating == 4.5
-        assert filters.location == "Boston"
+        assert filters.category == "Computers"
+        assert filters.min_seller_rating == 4.0
+        assert filters.store == "Anker"
+        assert filters.sort_by == "price_asc"
     
     def test_invalid_negative_price_min(self):
         """Should reject negative price_min."""
@@ -63,6 +66,17 @@ class TestSearchFilters:
         """Should reject negative seller rating."""
         with pytest.raises(ValueError, match="min_seller_rating must be between 0 and 5"):
             SearchFilters(min_seller_rating=-1.0)
+    
+    def test_invalid_sort_by(self):
+        """Should reject invalid sort_by value."""
+        with pytest.raises(ValueError, match="sort_by must be one of"):
+            SearchFilters(sort_by="invalid")
+    
+    def test_valid_sort_options(self):
+        """All SORT_OPTIONS should be accepted."""
+        for option in SORT_OPTIONS:
+            filters = SearchFilters(sort_by=option)
+            assert filters.sort_by == option
 
 
 class TestSearchFiltersFromDict:
@@ -90,20 +104,32 @@ class TestSearchFiltersFromDict:
         filters = SearchFilters.from_dict({"seller_rating": 4.5})
         assert filters.min_seller_rating == 4.5
     
+    def test_from_dict_with_store(self):
+        """Should parse store filter."""
+        filters = SearchFilters.from_dict({"store": "Anker"})
+        assert filters.store == "Anker"
+    
+    def test_from_dict_with_sort_by(self):
+        """Should parse sort_by."""
+        filters = SearchFilters.from_dict({"sort_by": "rating_desc"})
+        assert filters.sort_by == "rating_desc"
+    
     def test_from_dict_full_example(self):
         """Should parse the full example from the spec."""
         data = {
             "price": [10, 40],
-            "category": "home",
-            "seller_rating": ">=4.5",
-            "location": "Boston"
+            "category": "Computers",
+            "seller_rating": ">=4.0",
+            "store": "Sony",
+            "sort_by": "price_asc",
         }
         filters = SearchFilters.from_dict(data)
         assert filters.price_min == 10
         assert filters.price_max == 40
-        assert filters.category == "home"
-        assert filters.min_seller_rating == 4.5
-        assert filters.location == "Boston"
+        assert filters.category == "Computers"
+        assert filters.min_seller_rating == 4.0
+        assert filters.store == "Sony"
+        assert filters.sort_by == "price_asc"
     
     def test_from_dict_empty(self):
         """Should handle empty dict."""
@@ -112,7 +138,8 @@ class TestSearchFiltersFromDict:
         assert filters.price_max is None
         assert filters.category is None
         assert filters.min_seller_rating is None
-        assert filters.location is None
+        assert filters.store is None
+        assert filters.sort_by is None
 
 
 class TestSearchFiltersToDict:
@@ -123,15 +150,17 @@ class TestSearchFiltersToDict:
         filters = SearchFilters(
             price_min=10.0,
             price_max=40.0,
-            category="home",
-            min_seller_rating=4.5,
-            location="Boston"
+            category="Computers",
+            min_seller_rating=4.0,
+            store="Anker",
+            sort_by="price_asc",
         )
         result = filters.to_dict()
         assert result["price"] == [10.0, 40.0]
-        assert result["category"] == "home"
-        assert result["seller_rating"] == ">=4.5"
-        assert result["location"] == "Boston"
+        assert result["category"] == "Computers"
+        assert result["seller_rating"] == ">=4.0"
+        assert result["store"] == "Anker"
+        assert result["sort_by"] == "price_asc"
     
     def test_to_dict_empty(self):
         """Should return empty dict for default filters."""
@@ -141,9 +170,10 @@ class TestSearchFiltersToDict:
     
     def test_to_dict_partial(self):
         """Should only include non-None values."""
-        filters = SearchFilters(category="electronics", location="NYC")
+        filters = SearchFilters(category="electronics")
         result = filters.to_dict()
         assert "price" not in result
         assert "seller_rating" not in result
+        assert "store" not in result
+        assert "sort_by" not in result
         assert result["category"] == "electronics"
-        assert result["location"] == "NYC"

@@ -4,8 +4,12 @@ Search filters for candidate retrieval.
 Defines the hard constraints that products must satisfy to be candidates.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+from typing import List, Optional
+
+
+# Valid sort options for search results
+SORT_OPTIONS = ("price_asc", "price_desc", "rating_desc", "rating_asc")
 
 
 @dataclass
@@ -18,15 +22,19 @@ class SearchFilters:
         price_max: Maximum price (inclusive). None means no upper bound.
         category: Product category to match. None means any category.
         min_seller_rating: Minimum seller rating (inclusive). None means no minimum.
-        location: Seller location to match. None means any location.
+        store: Store/brand name to match. None means any store.
+        sort_by: Sort order for results. One of:
+                 "price_asc", "price_desc", "rating_desc", "rating_asc".
+                 None means no sorting (return in search order).
     
     Example:
         >>> filters = SearchFilters(
         ...     price_min=10.0,
         ...     price_max=40.0,
-        ...     category="home",
-        ...     min_seller_rating=4.5,
-        ...     location="Boston"
+        ...     category="Computers",
+        ...     min_seller_rating=4.0,
+        ...     store="Anker",
+        ...     sort_by="price_asc"
         ... )
     """
     
@@ -34,7 +42,8 @@ class SearchFilters:
     price_max: Optional[float] = None
     category: Optional[str] = None
     min_seller_rating: Optional[float] = None
-    location: Optional[str] = None
+    store: Optional[str] = None
+    sort_by: Optional[str] = None
     
     def __post_init__(self):
         """Validate filter values."""
@@ -48,6 +57,11 @@ class SearchFilters:
         if self.min_seller_rating is not None:
             if not (0 <= self.min_seller_rating <= 5):
                 raise ValueError("min_seller_rating must be between 0 and 5")
+        if self.sort_by is not None:
+            if self.sort_by not in SORT_OPTIONS:
+                raise ValueError(
+                    f"sort_by must be one of {SORT_OPTIONS}, got '{self.sort_by}'"
+                )
     
     @classmethod
     def from_dict(cls, data: dict) -> "SearchFilters":
@@ -59,7 +73,8 @@ class SearchFilters:
                 - "price": [min, max] or {"min": x, "max": y}
                 - "category": string
                 - "seller_rating": ">=X" or float
-                - "location": string
+                - "store": string
+                - "sort_by": string
         
         Returns:
             SearchFilters instance.
@@ -67,9 +82,10 @@ class SearchFilters:
         Example:
             >>> filters = SearchFilters.from_dict({
             ...     "price": [10, 40],
-            ...     "category": "home",
-            ...     "seller_rating": ">=4.5",
-            ...     "location": "Boston"
+            ...     "category": "Computers",
+            ...     "seller_rating": ">=4.0",
+            ...     "store": "Anker",
+            ...     "sort_by": "price_asc"
             ... })
         """
         price_min = None
@@ -96,7 +112,8 @@ class SearchFilters:
             price_max=price_max,
             category=data.get("category"),
             min_seller_rating=min_seller_rating,
-            location=data.get("location")
+            store=data.get("store"),
+            sort_by=data.get("sort_by"),
         )
     
     def to_dict(self) -> dict:
@@ -108,6 +125,8 @@ class SearchFilters:
             result["category"] = self.category
         if self.min_seller_rating is not None:
             result["seller_rating"] = f">={self.min_seller_rating}"
-        if self.location is not None:
-            result["location"] = self.location
+        if self.store is not None:
+            result["store"] = self.store
+        if self.sort_by is not None:
+            result["sort_by"] = self.sort_by
         return result

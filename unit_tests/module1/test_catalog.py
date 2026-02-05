@@ -12,71 +12,66 @@ class TestProduct:
     def test_create_product(self):
         """Should create a product with required fields."""
         product = Product(
-            id="p12",
-            title="Handmade Ceramic Mug",
-            price=18.0,
-            category="home",
-            seller_rating=4.8,
-            location="Boston"
+            id="B07BJ7ZZL7",
+            title="Silicone Watch Band",
+            price=14.89,
+            category="Cell Phones & Accessories",
+            seller_rating=4.4,
+            store="QGHXO"
         )
-        assert product.id == "p12"
-        assert product.title == "Handmade Ceramic Mug"
-        assert product.price == 18.0
-        assert product.category == "home"
-        assert product.seller_rating == 4.8
-        assert product.location == "Boston"
+        assert product.id == "B07BJ7ZZL7"
+        assert product.title == "Silicone Watch Band"
+        assert product.price == 14.89
+        assert product.category == "Cell Phones & Accessories"
+        assert product.seller_rating == 4.4
+        assert product.store == "QGHXO"
         assert product.description is None
         assert product.tags is None
+        assert product.image_url is None
     
     def test_create_product_with_optional_fields(self):
-        """Should accept optional description and tags."""
+        """Should accept optional description, tags, image_url, etc."""
         product = Product(
             id="p1",
             title="Test Product",
             price=10.0,
-            category="test",
+            category="Electronics",
             seller_rating=4.0,
-            location="NYC",
+            store="TestStore",
             description="A test product",
-            tags=["test", "sample"]
+            tags=["Electronics", "Gadgets"],
+            image_url="https://example.com/img.jpg",
+            rating_number=500,
+            features=["Feature 1", "Feature 2"]
         )
         assert product.description == "A test product"
-        assert product.tags == ["test", "sample"]
+        assert product.tags == ["Electronics", "Gadgets"]
+        assert product.image_url == "https://example.com/img.jpg"
+        assert product.rating_number == 500
+        assert product.features == ["Feature 1", "Feature 2"]
     
     def test_invalid_negative_price(self):
         """Should reject negative price."""
         with pytest.raises(ValueError, match="Price cannot be negative"):
             Product(
-                id="p1",
-                title="Test",
-                price=-5.0,
-                category="test",
-                seller_rating=4.0,
-                location="NYC"
+                id="p1", title="Test", price=-5.0,
+                category="test", seller_rating=4.0, store="X"
             )
     
     def test_invalid_seller_rating_too_high(self):
         """Should reject seller rating > 5."""
         with pytest.raises(ValueError, match="Seller rating must be 0-5"):
             Product(
-                id="p1",
-                title="Test",
-                price=10.0,
-                category="test",
-                seller_rating=5.5,
-                location="NYC"
+                id="p1", title="Test", price=10.0,
+                category="test", seller_rating=5.5, store="X"
             )
     
     def test_invalid_seller_rating_negative(self):
         """Should reject negative seller rating."""
         with pytest.raises(ValueError, match="Seller rating must be 0-5"):
             Product(
-                id="p1",
-                title="Test",
-                price=10.0,
-                category="test",
-                seller_rating=-1.0,
-                location="NYC"
+                id="p1", title="Test", price=10.0,
+                category="test", seller_rating=-1.0, store="X"
             )
     
     def test_product_from_dict(self):
@@ -85,33 +80,28 @@ class TestProduct:
             "id": "p1",
             "title": "Test Product",
             "price": 25.0,
-            "category": "electronics",
+            "category": "Computers",
             "seller_rating": 4.5,
-            "location": "LA",
+            "store": "Anker",
             "description": "Great product",
-            "tags": ["electronic", "gadget"]
+            "tags": ["Electronics", "Gadgets"],
+            "image_url": "https://example.com/img.jpg",
+            "rating_number": 100,
+            "features": ["Fast charging"],
         }
         product = Product.from_dict(data)
         assert product.id == "p1"
-        assert product.title == "Test Product"
-        assert product.price == 25.0
-        assert product.category == "electronics"
-        assert product.seller_rating == 4.5
-        assert product.location == "LA"
-        assert product.description == "Great product"
-        assert product.tags == ["electronic", "gadget"]
+        assert product.store == "Anker"
+        assert product.image_url == "https://example.com/img.jpg"
+        assert product.rating_number == 100
+        assert product.features == ["Fast charging"]
     
     def test_product_to_dict(self):
         """Should convert product to dictionary."""
         product = Product(
-            id="p1",
-            title="Test",
-            price=10.0,
-            category="test",
-            seller_rating=4.0,
-            location="NYC",
-            description="A test",
-            tags=["t1"]
+            id="p1", title="Test", price=10.0,
+            category="test", seller_rating=4.0, store="X",
+            description="A test", tags=["t1"]
         )
         result = product.to_dict()
         assert result["id"] == "p1"
@@ -119,23 +109,85 @@ class TestProduct:
         assert result["price"] == 10.0
         assert result["category"] == "test"
         assert result["seller_rating"] == 4.0
-        assert result["location"] == "NYC"
+        assert result["store"] == "X"
         assert result["description"] == "A test"
         assert result["tags"] == ["t1"]
     
     def test_product_to_dict_without_optional(self):
         """Should omit None optional fields in to_dict."""
         product = Product(
-            id="p1",
-            title="Test",
-            price=10.0,
-            category="test",
-            seller_rating=4.0,
-            location="NYC"
+            id="p1", title="Test", price=10.0,
+            category="test", seller_rating=4.0, store="X"
         )
         result = product.to_dict()
         assert "description" not in result
         assert "tags" not in result
+        assert "image_url" not in result
+        assert "rating_number" not in result
+        assert "features" not in result
+
+
+class TestProductFromAmazonMeta:
+    """Tests for Product.from_amazon_meta()."""
+    
+    def test_from_amazon_meta_basic(self):
+        """Should create product from Amazon metadata."""
+        meta = {
+            "parent_asin": "B07BJ7ZZL7",
+            "title": "Watch Band",
+            "price": 14.89,
+            "main_category": "Cell Phones & Accessories",
+            "average_rating": 4.4,
+            "store": "QGHXO",
+            "rating_number": 707,
+            "categories": ["Electronics", "Wearable Technology"],
+            "description": ["Great band", "for your watch"],
+            "features": ["Soft silicone", "Easy install"],
+            "images": [{"large": "https://example.com/img.jpg"}],
+        }
+        product = Product.from_amazon_meta(meta)
+        assert product is not None
+        assert product.id == "B07BJ7ZZL7"
+        assert product.title == "Watch Band"
+        assert product.price == 14.89
+        assert product.category == "Cell Phones & Accessories"
+        assert product.seller_rating == 4.4
+        assert product.store == "QGHXO"
+        assert product.image_url == "https://example.com/img.jpg"
+        assert product.tags == ["Electronics", "Wearable Technology"]
+        assert product.description == "Great band for your watch"
+        assert product.features == ["Soft silicone", "Easy install"]
+    
+    def test_from_amazon_meta_with_seller_rating(self):
+        """Should use provided seller_rating over average_rating."""
+        meta = {
+            "parent_asin": "B123",
+            "title": "Test",
+            "price": 10.0,
+            "main_category": "Electronics",
+            "average_rating": 3.0,
+            "store": "TestStore",
+        }
+        product = Product.from_amazon_meta(meta, seller_rating=4.5)
+        assert product.seller_rating == 4.5
+    
+    def test_from_amazon_meta_missing_price(self):
+        """Should return None when price is missing."""
+        meta = {"parent_asin": "B123", "title": "Test", "store": "X"}
+        product = Product.from_amazon_meta(meta)
+        assert product is None
+    
+    def test_from_amazon_meta_zero_price(self):
+        """Should return None when price is zero."""
+        meta = {"parent_asin": "B123", "title": "Test", "price": 0, "store": "X"}
+        product = Product.from_amazon_meta(meta)
+        assert product is None
+    
+    def test_from_amazon_meta_missing_title(self):
+        """Should return None when title is missing."""
+        meta = {"parent_asin": "B123", "price": 10.0, "store": "X"}
+        product = Product.from_amazon_meta(meta)
+        assert product is None
 
 
 class TestProductCatalog:
@@ -145,9 +197,9 @@ class TestProductCatalog:
     def sample_products(self):
         """Sample products for testing."""
         return [
-            Product(id="p1", title="Mug", price=15.0, category="home", seller_rating=4.5, location="Boston"),
-            Product(id="p2", title="Plate", price=25.0, category="home", seller_rating=4.2, location="NYC"),
-            Product(id="p3", title="Phone", price=500.0, category="electronics", seller_rating=4.8, location="LA"),
+            Product(id="p1", title="Mug", price=15.0, category="home", seller_rating=4.5, store="StoreA"),
+            Product(id="p2", title="Plate", price=25.0, category="home", seller_rating=4.2, store="StoreB"),
+            Product(id="p3", title="Phone", price=500.0, category="electronics", seller_rating=4.8, store="StoreC"),
         ]
     
     def test_empty_catalog(self):
@@ -163,7 +215,7 @@ class TestProductCatalog:
     def test_add_product(self):
         """Should add product to catalog."""
         catalog = ProductCatalog()
-        product = Product(id="p1", title="Test", price=10.0, category="test", seller_rating=4.0, location="NYC")
+        product = Product(id="p1", title="Test", price=10.0, category="test", seller_rating=4.0, store="X")
         catalog.add_product(product)
         assert len(catalog) == 1
         assert "p1" in catalog
@@ -213,11 +265,16 @@ class TestProductCatalog:
         ids = catalog.product_ids
         assert set(ids) == {"p1", "p2", "p3"}
     
+    def test_categories(self, sample_products):
+        """Should return sorted unique categories."""
+        catalog = ProductCatalog(sample_products)
+        assert catalog.categories == ["electronics", "home"]
+    
     def test_from_list(self):
         """Should create catalog from list of dicts."""
         data = [
-            {"id": "p1", "title": "A", "price": 10, "category": "x", "seller_rating": 4.0, "location": "Y"},
-            {"id": "p2", "title": "B", "price": 20, "category": "x", "seller_rating": 4.5, "location": "Z"},
+            {"id": "p1", "title": "A", "price": 10, "category": "x", "seller_rating": 4.0, "store": "Y"},
+            {"id": "p2", "title": "B", "price": 20, "category": "x", "seller_rating": 4.5, "store": "Z"},
         ]
         catalog = ProductCatalog.from_list(data)
         assert len(catalog) == 2
