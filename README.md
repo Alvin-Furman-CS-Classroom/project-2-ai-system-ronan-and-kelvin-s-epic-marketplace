@@ -186,7 +186,7 @@ pytest unit_tests/ -v --cov=src
 
 | Checkpoint | Date | Modules Included | Status | Evidence |
 | ---------- | ---- | ---------------- | ------ | -------- |
-| 1 | Feb 11 | Module 1 |  |  |
+| 1 | Feb 11 | Module 1 | In progress | `checkpoint_1_progression_report.md`, `checkpoint_preparation.md` |
 | 2 | Feb 26 | Modules 1-2 |  |  |
 | 3 | Mar 19 | Modules 1-3 |  |  |
 | 4 | Apr 2 | Modules 1-4 |  |  |

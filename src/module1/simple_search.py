@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import warnings
 from typing import Iterable, Optional
 
 import pandas as pd
 
 from src.data.working_set_builder import (
     TARGET_CATEGORIES,
-    add_predicted_category,
+    add_category_by_keywords,
     build_electronics_reviews_with_meta_df,
     filter_category_by_title,
-    train_category_model,
 )
+
+# Suppress noisy warnings during data load and search
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 
 
 def _choose_first_column(df: pd.DataFrame, candidates: Iterable[str]) -> Optional[str]:
@@ -42,8 +46,7 @@ def run_simple_search(
         review_filename=review_filename,
         meta_filename=meta_filename,
     )
-    model = train_category_model(df)
-    df = add_predicted_category(df, model)
+    df = add_category_by_keywords(df)
 
     prompt = (
         "Enter a category search ("

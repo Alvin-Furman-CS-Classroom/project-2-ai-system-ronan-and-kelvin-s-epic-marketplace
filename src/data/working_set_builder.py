@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -198,6 +199,46 @@ def map_main_category(raw_category: Optional[str], categories: Optional[Iterable
     return "other"
 
 
+def _build_search_text_vectorized(df: pd.DataFrame) -> pd.Series:
+    """Build combined searchable text from category and title columns (vectorized)."""
+    parts: List[pd.Series] = []
+    for col in ("main_category", "title_meta", "title_review"):
+        if col in df.columns:
+            parts.append(df[col].fillna("").astype(str))
+        else:
+            parts.append(pd.Series([""] * len(df), index=df.index))
+    if "categories" in df.columns:
+        cat_str = df["categories"].apply(
+            lambda x: " ".join(str(i) for i in x) if isinstance(x, list) else str(x) if x else ""
+        )
+        parts.append(cat_str)
+    combined = pd.concat(parts, axis=1).fillna("").astype(str).agg(" ".join, axis=1).str.lower()
+    return combined
+
+
+def add_category_by_keywords(
+    df: pd.DataFrame,
+    *,
+    column_name: str = "clean_main_category",
+) -> pd.DataFrame:
+    """
+    Add a category column using vectorized keyword matching on title and category fields.
+    Fast alternative to train_category_model + add_predicted_category for simple search.
+    """
+    combined = _build_search_text_vectorized(df)
+    result = df.copy()
+    result[column_name] = "other"
+    # Apply categories in order so earlier matches take precedence
+    for target in TARGET_CATEGORIES:
+        if target == "other":
+            continue
+        keywords = _KEYWORD_MAP[target]
+        pattern = "|".join(re.escape(k) for k in keywords)
+        mask = combined.str.contains(pattern, regex=True, na=False) & (result[column_name] == "other")
+        result.loc[mask, column_name] = target
+    return result
+
+
 def build_text_features(row: pd.Series) -> str:
     """Join title, description, and review text fields into one string."""
     parts: List[str] = []
@@ -227,7 +268,7 @@ def train_category_model(df: pd.DataFrame) -> CategoryModel:
 
     vectorizer = TfidfVectorizer(stop_words="english", min_df=2)
     features = vectorizer.fit_transform(texts)
-    classifier = LogisticRegression(max_iter=1000, n_jobs=1)
+    classifier = LogisticRegression(max_iter=1000)
     classifier.fit(features, labels)
     return CategoryModel(vectorizer=vectorizer, classifier=classifier, label_set=list(TARGET_CATEGORIES))
 

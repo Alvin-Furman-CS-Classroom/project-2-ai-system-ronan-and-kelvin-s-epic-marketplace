@@ -325,3 +325,141 @@ class TestGetCandidatesWithProducts(TestCandidateRetrieval):
         products = retrieval.get_candidates_with_products(filters)
         for product in products:
             assert product.seller_rating >= 4.5
+
+    def test_get_candidates_with_products_respects_strategy(self, retrieval):
+        """get_candidates_with_products should use specified strategy."""
+        filters = SearchFilters(category="home", sort_by="price_asc")
+        products_linear = retrieval.get_candidates_with_products(filters, strategy="linear")
+        products_priority = retrieval.get_candidates_with_products(filters, strategy="priority")
+        assert {p.id for p in products_linear} == {p.id for p in products_priority}
+        # With sort_by, order should match
+        assert [p.id for p in products_linear] == [p.id for p in products_priority]
+
+
+class TestRetrievalEdgeCases(TestCandidateRetrieval):
+    """Edge cases and boundary conditions for retrieval."""
+
+    def test_empty_catalog(self):
+        """Search on empty catalog should return empty list."""
+        catalog = ProductCatalog()
+        retrieval = CandidateRetrieval(catalog)
+        filters = SearchFilters()
+        candidates = retrieval.search(filters)
+        assert candidates == []
+
+    def test_single_product_catalog(self):
+        """Search on single-product catalog."""
+        catalog = ProductCatalog([
+            Product(id="p1", title="Mug", price=15.0, category="home", seller_rating=4.5, store="A"),
+        ])
+        retrieval = CandidateRetrieval(catalog)
+        filters = SearchFilters(category="home")
+        candidates = retrieval.search(filters)
+        assert candidates == ["p1"]
+
+    def test_single_product_no_match(self):
+        """Single product that doesn't match returns empty."""
+        catalog = ProductCatalog([
+            Product(id="p1", title="Mug", price=15.0, category="home", seller_rating=4.5, store="A"),
+        ])
+        retrieval = CandidateRetrieval(catalog)
+        filters = SearchFilters(category="electronics")
+        candidates = retrieval.search(filters)
+        assert candidates == []
+
+    def test_price_exactly_at_min_boundary(self, retrieval, sample_catalog):
+        """Product with price exactly at price_min should match."""
+        # p10 has price 12.0
+        filters = SearchFilters(price_min=12.0, price_max=100.0)
+        candidates = retrieval.search(filters)
+        assert "p10" in candidates
+
+    def test_price_exactly_at_max_boundary(self, retrieval, sample_catalog):
+        """Product with price exactly at price_max should match."""
+        # p10 has price 12.0
+        filters = SearchFilters(price_min=0.0, price_max=12.0)
+        candidates = retrieval.search(filters)
+        assert "p10" in candidates
+
+    def test_seller_rating_exactly_at_min_boundary(self, retrieval):
+        """Product with seller_rating exactly at min_seller_rating should match."""
+        # p2 has rating 4.5
+        filters = SearchFilters(min_seller_rating=4.5)
+        candidates = retrieval.search(filters)
+        assert "p2" in candidates
+
+    def test_max_results_zero(self, retrieval):
+        """max_results=0 should return empty list."""
+        filters = SearchFilters(category="home")
+        candidates = retrieval.search(filters, max_results=0)
+        assert candidates == []
+
+
+class TestStrategyEquivalence(TestCandidateRetrieval):
+    """All search strategies should return the same set of candidates (recall equivalence)."""
+
+    def test_strategies_return_same_set_no_sort(self, retrieval):
+        """Linear, BFS, DFS, priority should return same set when sort_by is None."""
+        filters = SearchFilters(price_min=10.0, price_max=40.0, category="home")
+        linear = set(retrieval.search(filters, strategy="linear"))
+        bfs = set(retrieval.search(filters, strategy="bfs"))
+        dfs = set(retrieval.search(filters, strategy="dfs"))
+        priority = set(retrieval.search(filters, strategy="priority"))
+        assert linear == bfs == dfs == priority
+
+    def test_strategies_return_same_set_with_sort(self, retrieval):
+        """With sort_by, all strategies should return same IDs in same order."""
+        filters = SearchFilters(category="electronics", sort_by="price_asc")
+        linear = retrieval.search(filters, strategy="linear")
+        bfs = retrieval.search(filters, strategy="bfs")
+        dfs = retrieval.search(filters, strategy="dfs")
+        priority = retrieval.search(filters, strategy="priority")
+        assert linear == bfs == dfs == priority
+
+    def test_strategies_with_max_results_same_count(self, retrieval):
+        """All strategies with max_results should return same number of items."""
+        filters = SearchFilters(category="home")
+        for strategy in ("linear", "bfs", "dfs", "priority"):
+            candidates = retrieval.search(filters, strategy=strategy, max_results=3)
+            assert len(candidates) == 3
+
+
+class TestPrioritySearchHeuristic(TestCandidateRetrieval):
+    """Tests for priority search heuristic behavior."""
+
+    def test_priority_search_orders_by_heuristic_when_sorted(self, retrieval):
+        """With sort_by, priority search results should follow sort order."""
+        filters = SearchFilters(category="home", sort_by="price_asc")
+        candidates = retrieval.search(filters, strategy="priority")
+        prices = [retrieval.catalog[pid].price for pid in candidates]
+        assert prices == sorted(prices)
+
+    def test_priority_zero_for_perfect_match(self, retrieval):
+        """Product matching all filters should have priority 0."""
+        product = Product(id="x", title="Test", price=25.0, category="home", seller_rating=4.8, store="StoreA")
+        filters = SearchFilters(price_min=20.0, price_max=30.0, category="home", min_seller_rating=4.5, store="StoreA")
+        priority = retrieval._compute_priority(product, filters)
+        assert priority == 0.0
+
+    def test_priority_penalizes_price_below_min(self, retrieval):
+        """Priority should increase when price is below min."""
+        product = Product(id="x", title="Test", price=5.0, category="home", seller_rating=4.5, store="A")
+        filters = SearchFilters(price_min=10.0, category="home")
+        priority = retrieval._compute_priority(product, filters)
+        assert priority > 0
+        assert priority == 5.0  # 10 - 5
+
+    def test_priority_penalizes_wrong_category(self, retrieval):
+        """Priority should add 100 for wrong category."""
+        product = Product(id="x", title="Test", price=25.0, category="electronics", seller_rating=4.5, store="A")
+        filters = SearchFilters(price_min=20.0, price_max=30.0, category="home")
+        priority = retrieval._compute_priority(product, filters)
+        assert priority >= 100
+
+    def test_priority_penalizes_rating_below_min(self, retrieval):
+        """Priority should penalize rating below minimum."""
+        product = Product(id="x", title="Test", price=25.0, category="home", seller_rating=3.0, store="A")
+        filters = SearchFilters(price_min=20.0, price_max=30.0, category="home", min_seller_rating=4.0)
+        priority = retrieval._compute_priority(product, filters)
+        assert priority > 0
+        assert priority == 10.0  # (4.0 - 3.0) * 10

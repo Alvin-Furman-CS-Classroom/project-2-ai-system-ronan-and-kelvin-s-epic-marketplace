@@ -288,3 +288,142 @@ class TestProductCatalog:
         assert len(result) == 3
         ids = {p["id"] for p in result}
         assert ids == {"p1", "p2", "p3"}
+
+    def test_add_product_overwrites_duplicate_id(self):
+        """Adding product with same id should overwrite existing."""
+        catalog = ProductCatalog()
+        p1a = Product(id="p1", title="First", price=10.0, category="x", seller_rating=4.0, store="A")
+        p1b = Product(id="p1", title="Second", price=20.0, category="y", seller_rating=3.0, store="B")
+        catalog.add_product(p1a)
+        catalog.add_product(p1b)
+        assert len(catalog) == 1
+        assert catalog["p1"].title == "Second"
+        assert catalog["p1"].price == 20.0
+
+    def test_categories_sorted_unique(self):
+        """Categories should be sorted unique values (case-sensitive)."""
+        products = [
+            Product(id="p1", title="A", price=10.0, category="Zebra", seller_rating=4.0, store="X"),
+            Product(id="p2", title="B", price=20.0, category="alpha", seller_rating=4.0, store="Y"),
+            Product(id="p3", title="C", price=30.0, category="Zebra", seller_rating=4.0, store="Z"),
+        ]
+        catalog = ProductCatalog(products)
+        assert catalog.categories == ["Zebra", "alpha"]
+
+    def test_stores_sorted(self):
+        """Stores should be sorted alphabetically."""
+        products = [
+            Product(id="p1", title="A", price=10.0, category="x", seller_rating=4.0, store="Charlie"),
+            Product(id="p2", title="B", price=20.0, category="x", seller_rating=4.0, store="Alpha"),
+            Product(id="p3", title="C", price=30.0, category="x", seller_rating=4.0, store="Bravo"),
+        ]
+        catalog = ProductCatalog(products)
+        assert catalog.stores == ["Alpha", "Bravo", "Charlie"]
+
+    def test_product_ids_order_stable(self):
+        """product_ids should return list (order may vary but should be consistent within run)."""
+        catalog = ProductCatalog([
+            Product(id="c", title="C", price=10.0, category="x", seller_rating=4.0, store="X"),
+            Product(id="a", title="A", price=10.0, category="x", seller_rating=4.0, store="Y"),
+            Product(id="b", title="B", price=10.0, category="x", seller_rating=4.0, store="Z"),
+        ])
+        ids = catalog.product_ids
+        assert set(ids) == {"a", "b", "c"}
+        assert len(ids) == 3
+
+
+class TestProductBoundaryValues:
+    """Tests for Product at boundary values."""
+
+    def test_seller_rating_zero(self):
+        """Should accept seller_rating of 0."""
+        product = Product(id="p1", title="Test", price=10.0, category="x", seller_rating=0.0, store="X")
+        assert product.seller_rating == 0.0
+
+    def test_seller_rating_five(self):
+        """Should accept seller_rating of 5.0."""
+        product = Product(id="p1", title="Test", price=10.0, category="x", seller_rating=5.0, store="X")
+        assert product.seller_rating == 5.0
+
+    def test_price_zero_rejected_by_from_amazon_meta(self):
+        """from_amazon_meta rejects price 0."""
+        meta = {"parent_asin": "B123", "title": "Test", "price": 0, "main_category": "X", "store": "Y"}
+        assert Product.from_amazon_meta(meta) is None
+
+    def test_price_negative_rejected_by_from_amazon_meta(self):
+        """from_amazon_meta rejects negative price."""
+        meta = {"parent_asin": "B123", "title": "Test", "price": -5.0, "main_category": "X", "store": "Y"}
+        assert Product.from_amazon_meta(meta) is None
+
+
+class TestProductFromAmazonMetaEdgeCases:
+    """Additional edge cases for Product.from_amazon_meta()."""
+
+    def test_from_amazon_meta_missing_parent_asin(self):
+        """Should return None when parent_asin is missing."""
+        meta = {"title": "Test", "price": 10.0, "main_category": "X", "store": "Y"}
+        product = Product.from_amazon_meta(meta)
+        assert product is None
+
+    def test_from_amazon_meta_invalid_price_string(self):
+        """Should return None when price is non-numeric string."""
+        meta = {"parent_asin": "B123", "title": "Test", "price": "free", "main_category": "X", "store": "Y"}
+        product = Product.from_amazon_meta(meta)
+        assert product is None
+
+    def test_from_amazon_meta_images_empty_list(self):
+        """Should handle empty images list."""
+        meta = {
+            "parent_asin": "B123",
+            "title": "Test",
+            "price": 10.0,
+            "main_category": "X",
+            "store": "Y",
+            "images": [],
+        }
+        product = Product.from_amazon_meta(meta)
+        assert product is not None
+        assert product.image_url is None
+
+    def test_from_amazon_meta_images_thumb_fallback(self):
+        """Should use thumb if large/hi_res not present."""
+        meta = {
+            "parent_asin": "B123",
+            "title": "Test",
+            "price": 10.0,
+            "main_category": "X",
+            "store": "Y",
+            "images": [{"thumb": "https://example.com/thumb.jpg"}],
+        }
+        product = Product.from_amazon_meta(meta)
+        assert product is not None
+        assert product.image_url == "https://example.com/thumb.jpg"
+
+    def test_from_amazon_meta_hi_res_precedence(self):
+        """Should prefer large over hi_res over thumb."""
+        meta = {
+            "parent_asin": "B123",
+            "title": "Test",
+            "price": 10.0,
+            "main_category": "X",
+            "store": "Y",
+            "images": [
+                {"large": "https://large.jpg", "hi_res": "https://hires.jpg", "thumb": "https://thumb.jpg"}
+            ],
+        }
+        product = Product.from_amazon_meta(meta)
+        assert product.image_url == "https://large.jpg"
+
+    def test_from_amazon_meta_description_non_list(self):
+        """Should handle description as non-list (gracefully)."""
+        meta = {
+            "parent_asin": "B123",
+            "title": "Test",
+            "price": 10.0,
+            "main_category": "X",
+            "store": "Y",
+            "description": "plain string",
+        }
+        product = Product.from_amazon_meta(meta)
+        assert product is not None
+        assert product.description is None  # expects list, may not join

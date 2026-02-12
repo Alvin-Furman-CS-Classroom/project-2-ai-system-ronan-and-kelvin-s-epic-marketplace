@@ -177,3 +177,71 @@ class TestSearchFiltersToDict:
         assert "store" not in result
         assert "sort_by" not in result
         assert result["category"] == "electronics"
+
+
+class TestSearchFiltersEdgeCases:
+    """Edge cases and boundary conditions for SearchFilters."""
+
+    def test_price_min_equals_price_max(self):
+        """Should accept price_min == price_max (exact price filter)."""
+        filters = SearchFilters(price_min=25.0, price_max=25.0)
+        assert filters.price_min == 25.0
+        assert filters.price_max == 25.0
+
+    def test_seller_rating_boundary_zero(self):
+        """Should accept min_seller_rating of 0."""
+        filters = SearchFilters(min_seller_rating=0.0)
+        assert filters.min_seller_rating == 0.0
+
+    def test_seller_rating_boundary_five(self):
+        """Should accept min_seller_rating of 5.0."""
+        filters = SearchFilters(min_seller_rating=5.0)
+        assert filters.min_seller_rating == 5.0
+
+    def test_from_dict_with_category(self):
+        """Should parse category from dict."""
+        filters = SearchFilters.from_dict({"category": "Electronics"})
+        assert filters.category == "Electronics"
+
+    def test_from_dict_ignores_unknown_keys(self):
+        """Should ignore unknown keys in from_dict."""
+        filters = SearchFilters.from_dict({
+            "price": [10, 20],
+            "category": "x",
+            "unknown_key": "ignored",
+            "another_unknown": 999,
+        })
+        assert filters.price_min == 10
+        assert filters.price_max == 20
+        assert filters.category == "x"
+
+    def test_to_dict_round_trip(self):
+        """to_dict then from_dict should preserve values."""
+        original = SearchFilters(
+            price_min=15.0,
+            price_max=50.0,
+            category="Computers",
+            min_seller_rating=4.2,
+            store="Anker",
+            sort_by="rating_desc",
+        )
+        as_dict = original.to_dict()
+        restored = SearchFilters.from_dict(as_dict)
+        assert restored.price_min == original.price_min
+        assert restored.price_max == original.price_max
+        assert restored.category == original.category
+        assert restored.min_seller_rating == original.min_seller_rating
+        assert restored.store == original.store
+        assert restored.sort_by == original.sort_by
+
+    def test_from_dict_price_min_only(self):
+        """Should handle price with only min (from dict with min key)."""
+        filters = SearchFilters.from_dict({"price": {"min": 10}})
+        assert filters.price_min == 10
+        assert filters.price_max is None
+
+    def test_from_dict_price_max_only(self):
+        """Should handle price with only max (from dict with max key)."""
+        filters = SearchFilters.from_dict({"price": {"max": 100}})
+        assert filters.price_min is None
+        assert filters.price_max == 100
