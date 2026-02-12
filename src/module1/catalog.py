@@ -4,8 +4,14 @@ Product catalog for the marketplace.
 Defines Product and ProductCatalog classes for storing and accessing products.
 """
 
+import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Iterator
+
+from .exceptions import ProductValidationError, ProductNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,9 +58,11 @@ class Product:
     def __post_init__(self):
         """Validate product attributes."""
         if self.price < 0:
-            raise ValueError(f"Price cannot be negative: {self.price}")
+            raise ProductValidationError(f"Price cannot be negative: {self.price}")
         if not (0 <= self.seller_rating <= 5):
-            raise ValueError(f"Seller rating must be 0-5: {self.seller_rating}")
+            raise ProductValidationError(
+                f"Seller rating must be 0-5: {self.seller_rating}"
+            )
     
     @classmethod
     def from_dict(cls, data: dict) -> "Product":
@@ -196,21 +204,27 @@ class ProductCatalog:
             products: Optional list of products to add initially.
         """
         self._products: Dict[str, Product] = {}
+        self._category_index: Dict[str, List[str]] = defaultdict(list)
         if products:
             for product in products:
                 self.add_product(product)
+        logger.info("Catalog initialized with %d products", len(self._products))
     
     def add_product(self, product: Product) -> None:
         """Add a product to the catalog."""
         self._products[product.id] = product
+        self._category_index[product.category.lower()].append(product.id)
     
     def get(self, product_id: str) -> Optional[Product]:
         """Get a product by ID, or None if not found."""
         return self._products.get(product_id)
     
     def __getitem__(self, product_id: str) -> Product:
-        """Get a product by ID, raising KeyError if not found."""
-        return self._products[product_id]
+        """Get a product by ID, raising ProductNotFoundError if not found."""
+        try:
+            return self._products[product_id]
+        except KeyError:
+            raise ProductNotFoundError(f"Product not found: {product_id}")
     
     def __contains__(self, product_id: str) -> bool:
         """Check if a product ID exists in the catalog."""
@@ -238,6 +252,19 @@ class ProductCatalog:
     def stores(self) -> List[str]:
         """Return sorted list of unique store names in the catalog."""
         return sorted({p.store for p in self._products.values() if p.store})
+
+    def get_ids_by_category(self, category: str) -> List[str]:
+        """Return product IDs belonging to a category (case-insensitive).
+
+        Uses an internal index for O(1) lookup instead of scanning.
+
+        Args:
+            category: Category name.
+
+        Returns:
+            List of product IDs in that category.
+        """
+        return list(self._category_index.get(category.lower(), []))
     
     @classmethod
     def from_list(cls, products_data: List[dict]) -> "ProductCatalog":

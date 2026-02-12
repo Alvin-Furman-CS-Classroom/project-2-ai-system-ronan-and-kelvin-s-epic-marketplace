@@ -186,7 +186,7 @@ pytest unit_tests/ -v --cov=src
 
 | Checkpoint | Date | Modules Included | Status | Evidence |
 | ---------- | ---- | ---------------- | ------ | -------- |
-| 1 | Feb 11 | Module 1 |  |  |
+| 1 | Feb 11 | Module 1 | Complete | 86+ unit tests, integration tests, 4 search strategies (linear/BFS/DFS/priority), typed `SearchResult`, custom exceptions, logging, category index |
 | 2 | Feb 26 | Modules 1-2 |  |  |
 | 3 | Mar 19 | Modules 1-3 |  |  |
 | 4 | Apr 2 | Modules 1-4 |  |  |

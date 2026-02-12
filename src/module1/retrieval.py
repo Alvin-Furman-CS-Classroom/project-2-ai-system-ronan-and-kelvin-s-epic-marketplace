@@ -5,13 +5,47 @@ Implements uninformed (BFS/DFS) and informed (A*-style priority) search
 to find products matching hard constraints, with optional result sorting.
 """
 
+import logging
+import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Set
 import heapq
 
+from .exceptions import UnknownSearchStrategyError
 from .filters import SearchFilters
 from .catalog import ProductCatalog, Product
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """Immutable container for search output.
+
+    Attributes:
+        candidate_ids: Product IDs matching the filters.
+        strategy: The search strategy that was used.
+        total_scanned: How many products were examined.
+        elapsed_ms: Wall-clock time of the search in milliseconds.
+    """
+
+    candidate_ids: List[str]
+    strategy: str
+    total_scanned: int
+    elapsed_ms: float
+
+    @property
+    def count(self) -> int:
+        """Number of candidates returned."""
+        return len(self.candidate_ids)
+
+    def __iter__(self):
+        """Allow unpacking / iteration over candidate IDs."""
+        return iter(self.candidate_ids)
+
+    def __len__(self) -> int:
+        return len(self.candidate_ids)
 
 
 @dataclass
@@ -47,6 +81,8 @@ class CandidateRetrieval:
         >>> print(candidates)  # ["B08GFTPQ5B", "B07BJ7ZZL7"]  (sorted by price)
     """
     
+    STRATEGIES = ("linear", "bfs", "dfs", "priority")
+
     def __init__(self, catalog: ProductCatalog):
         """
         Initialize the retrieval system.
@@ -131,7 +167,7 @@ class CandidateRetrieval:
         filters: SearchFilters,
         strategy: str = "linear",
         max_results: Optional[int] = None
-    ) -> List[str]:
+    ) -> SearchResult:
         """
         Search for candidate products matching filters.
         
@@ -141,11 +177,13 @@ class CandidateRetrieval:
             max_results: Maximum number of results to return. None for all.
         
         Returns:
-            List of product IDs that match the filters, optionally sorted.
+            SearchResult containing matching product IDs and metadata.
         
         Raises:
-            ValueError: If strategy is not recognized.
+            UnknownSearchStrategyError: If strategy is not recognized.
         """
+        start = time.perf_counter()
+
         if strategy == "linear":
             candidates = self._linear_search(filters, max_results=None)
         elif strategy == "bfs":
@@ -155,8 +193,13 @@ class CandidateRetrieval:
         elif strategy == "priority":
             candidates = self._priority_search(filters, max_results=None)
         else:
-            raise ValueError(f"Unknown search strategy: {strategy}")
+            raise UnknownSearchStrategyError(
+                f"Unknown search strategy: {strategy}. "
+                f"Choose from {self.STRATEGIES}"
+            )
         
+        total_scanned = len(self.catalog)
+
         # Apply sorting if requested
         if filters.sort_by is not None:
             candidates = self._sort_candidates(candidates, filters.sort_by)
@@ -165,7 +208,21 @@ class CandidateRetrieval:
         if max_results is not None:
             candidates = candidates[:max_results]
         
-        return candidates
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "strategy=%s filters=%s candidates=%d scanned=%d elapsed=%.2fms",
+            strategy,
+            filters.to_dict(),
+            len(candidates),
+            total_scanned,
+            elapsed_ms,
+        )
+        return SearchResult(
+            candidate_ids=candidates,
+            strategy=strategy,
+            total_scanned=total_scanned,
+            elapsed_ms=elapsed_ms,
+        )
     
     def _linear_search(
         self,
@@ -348,5 +405,5 @@ class CandidateRetrieval:
         Returns:
             List of Product objects that match the filters.
         """
-        candidate_ids = self.search(filters, strategy)
-        return [self.catalog[pid] for pid in candidate_ids]
+        result = self.search(filters, strategy)
+        return [self.catalog[pid] for pid in result.candidate_ids]

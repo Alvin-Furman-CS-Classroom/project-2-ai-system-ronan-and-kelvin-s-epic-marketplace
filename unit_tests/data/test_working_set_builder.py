@@ -24,12 +24,20 @@ class TestCategoryMapping:
 
 class TestTrainingAndPrediction:
     def test_training_adds_category_column(self):
+        """Model needs enough rows to satisfy min_df=2 in the vectorizer."""
         df = pd.DataFrame(
             [
                 {
                     "title_meta": "Gaming Laptop",
                     "description": ["High performance laptop"],
                     "text": "Great laptop for work",
+                    "main_category": "Computers",
+                    "categories": ["Electronics", "Laptops"],
+                },
+                {
+                    "title_meta": "Business Laptop Pro",
+                    "description": ["Thin and light laptop"],
+                    "text": "Perfect laptop for travel",
                     "main_category": "Computers",
                     "categories": ["Electronics", "Laptops"],
                 },
@@ -41,9 +49,23 @@ class TestTrainingAndPrediction:
                     "categories": ["Electronics", "Computer Accessories"],
                 },
                 {
+                    "title_meta": "Ergonomic Mouse Pad",
+                    "description": ["Gel mouse pad"],
+                    "text": "Mouse pad is comfortable",
+                    "main_category": "Accessories",
+                    "categories": ["Electronics", "Computer Accessories"],
+                },
+                {
                     "title_meta": "Noise Cancelling Headphones",
-                    "description": ["Over ear"],
+                    "description": ["Over ear headphones"],
                     "text": "Headphones with great sound",
+                    "main_category": "Audio",
+                    "categories": ["Electronics", "Headphones"],
+                },
+                {
+                    "title_meta": "Wireless Earbuds",
+                    "description": ["Bluetooth earbuds"],
+                    "text": "Earbuds for running",
                     "main_category": "Audio",
                     "categories": ["Electronics", "Headphones"],
                 },
