@@ -66,7 +66,17 @@ class Product:
     
     @classmethod
     def from_dict(cls, data: dict) -> "Product":
-        """Create a Product from a dictionary."""
+        """Create a Product from a dictionary.
+
+        Args:
+            data: Dictionary with keys matching Product fields
+                  (id, title, price, category, seller_rating, store,
+                  and optional description, tags, image_url,
+                  rating_number, features).
+
+        Returns:
+            Product instance.
+        """
         return cls(
             id=data["id"],
             title=data["title"],
@@ -160,7 +170,11 @@ class Product:
         )
     
     def to_dict(self) -> dict:
-        """Convert product to dictionary."""
+        """Convert product to dictionary.
+
+        Returns:
+            Dictionary with all non-None product fields.
+        """
         result = {
             "id": self.id,
             "title": self.title,
@@ -211,12 +225,23 @@ class ProductCatalog:
         logger.info("Catalog initialized with %d products", len(self._products))
     
     def add_product(self, product: Product) -> None:
-        """Add a product to the catalog."""
+        """Add a product to the catalog.
+
+        Args:
+            product: Product instance to add. Overwrites if ID exists.
+        """
         self._products[product.id] = product
         self._category_index[product.category.lower()].append(product.id)
     
     def get(self, product_id: str) -> Optional[Product]:
-        """Get a product by ID, or None if not found."""
+        """Get a product by ID, or None if not found.
+
+        Args:
+            product_id: The product ID to look up.
+
+        Returns:
+            Product if found, None otherwise.
+        """
         return self._products.get(product_id)
     
     def __getitem__(self, product_id: str) -> Product:
@@ -281,5 +306,9 @@ class ProductCatalog:
         return cls(products)
     
     def to_list(self) -> List[dict]:
-        """Convert catalog to list of dictionaries."""
+        """Convert catalog to list of dictionaries.
+
+        Returns:
+            List of product dictionaries (via Product.to_dict).
+        """
         return [p.to_dict() for p in self._products.values()]

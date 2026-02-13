@@ -121,7 +121,13 @@ class SearchFilters:
         )
     
     def to_dict(self) -> dict:
-        """Convert filters to dictionary representation."""
+        """Convert filters to dictionary representation.
+
+        Returns:
+            Dictionary with non-None filter values. Price is
+            represented as ``[min, max]`` and seller_rating
+            as ``">=value"``.
+        """
         result = {}
         if self.price_min is not None or self.price_max is not None:
             result["price"] = [self.price_min, self.price_max]

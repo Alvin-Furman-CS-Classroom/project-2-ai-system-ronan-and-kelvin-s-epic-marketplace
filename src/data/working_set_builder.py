@@ -222,9 +222,17 @@ def add_category_by_keywords(
     *,
     column_name: str = "clean_main_category",
 ) -> pd.DataFrame:
-    """
-    Add a category column using vectorized keyword matching on title and category fields.
+    """Add a category column using vectorized keyword matching on title and category fields.
+
     Fast alternative to train_category_model + add_predicted_category for simple search.
+
+    Args:
+        df: DataFrame containing product title/category columns.
+        column_name: Name of the new category column to create.
+
+    Returns:
+        Copy of *df* with the new category column populated from
+        :data:`TARGET_CATEGORIES`.
     """
     combined = _build_search_text_vectorized(df)
     result = df.copy()
@@ -241,7 +249,15 @@ def add_category_by_keywords(
 
 
 def build_text_features(row: pd.Series) -> str:
-    """Join title, description, and review text fields into one string."""
+    """Join title, description, and review text fields into one string.
+
+    Args:
+        row: A single DataFrame row with optional columns
+             ``title_meta``, ``title_review``, ``description``, ``text``.
+
+    Returns:
+        Lowercased, space-joined concatenation of all available text fields.
+    """
     parts: List[str] = []
     for key in ("title_meta", "title_review", "description", "text"):
         value = row.get(key)
@@ -280,8 +296,15 @@ def add_predicted_category(
     *,
     column_name: str = "clean_main_category",
 ) -> pd.DataFrame:
-    """
-    Add a predicted category column to a dataframe.
+    """Add a predicted category column to a dataframe.
+
+    Args:
+        df: DataFrame containing product rows.
+        model: Trained :class:`CategoryModel` with vectorizer and classifier.
+        column_name: Name of the new prediction column.
+
+    Returns:
+        Copy of *df* with predicted category labels.
     """
     texts = [build_text_features(row) for _, row in df.iterrows()]
     features = model.vectorizer.transform(texts)
@@ -297,8 +320,18 @@ def filter_category_by_title(
     *,
     title_columns: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """
-    Filter category rows to titles that match required terms and avoid exclusions.
+    """Filter category rows to titles that match required terms and avoid exclusions.
+
+    Args:
+        df: DataFrame of product rows to filter.
+        category: Target category name (looked up in
+                  ``_CATEGORY_TITLE_REQUIREMENTS`` / ``_CATEGORY_TITLE_EXCLUSIONS``).
+        title_columns: Columns to search for keywords. Defaults to
+                       ``["title_meta", "title_review", "title"]``.
+
+    Returns:
+        Filtered DataFrame containing only rows whose title includes a
+        required keyword and excludes any exclusion keywords.
     """
     normalized = category.strip().lower()
     required = _CATEGORY_TITLE_REQUIREMENTS.get(normalized, [])
