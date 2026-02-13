@@ -8,12 +8,13 @@ Covers scenarios missing from the main test files:
  - Category index lookup
  - All strategies return consistent results
  - Priority search ordering (low-priority items examined first)
+ - Search-tree structure and BFS/DFS pruning behaviour
 """
 
 import pytest
 from src.module1.catalog import Product, ProductCatalog
 from src.module1.filters import SearchFilters
-from src.module1.retrieval import CandidateRetrieval, SearchResult
+from src.module1.retrieval import CandidateRetrieval, SearchResult, SearchNode
 from src.module1.exceptions import (
     InvalidFilterError,
     ProductNotFoundError,
@@ -187,3 +188,117 @@ class TestExceptionHierarchy:
     def test_unknown_strategy_is_epic_error(self, retrieval):
         with pytest.raises(UnknownSearchStrategyError):
             retrieval.search(SearchFilters(), strategy="magic")
+
+
+# ---------------------------------------------------------------------------
+# Search-tree structure tests
+# ---------------------------------------------------------------------------
+
+class TestSearchTree:
+    """Verify the Category → Store → Product search tree is built correctly."""
+
+    def test_tree_has_root(self, retrieval):
+        """Tree should always contain a root node at depth 0."""
+        assert "root" in retrieval._tree
+        assert retrieval._tree["root"].depth == 0
+
+    def test_tree_categories_at_depth_1(self, retrieval):
+        """Category nodes should be at depth 1."""
+        root = retrieval._tree["root"]
+        for child_name in root.children:
+            node = retrieval._tree[child_name]
+            assert node.depth == 1
+            assert child_name.startswith("cat:")
+
+    def test_tree_stores_at_depth_2(self, retrieval):
+        """Store nodes should be at depth 2 under their category."""
+        for name, node in retrieval._tree.items():
+            if node.depth == 2:
+                assert name.startswith("store:")
+
+    def test_tree_products_at_depth_3(self, retrieval, sample_catalog):
+        """Product leaves should be at depth 3 and cover every product."""
+        leaf_ids = {
+            node.product_id
+            for node in retrieval._tree.values()
+            if node.product_id is not None
+        }
+        assert leaf_ids == set(sample_catalog.product_ids)
+
+    def test_tree_covers_all_categories(self, retrieval, sample_catalog):
+        """Every distinct category in the catalog should appear as a depth-1 node."""
+        tree_cats = {
+            name.split(":", 1)[1]
+            for name, node in retrieval._tree.items()
+            if node.depth == 1
+        }
+        catalog_cats = {p.category.lower() for p in sample_catalog}
+        assert tree_cats == catalog_cats
+
+    def test_empty_catalog_tree(self):
+        """Empty catalog should produce a tree with only the root node."""
+        catalog = ProductCatalog()
+        retrieval = CandidateRetrieval(catalog)
+        assert len(retrieval._tree) == 1
+        assert "root" in retrieval._tree
+
+
+class TestBFSTreeBehaviour:
+    """BFS should explore the tree breadth-first with pruning."""
+
+    def test_bfs_prunes_wrong_category(self, retrieval):
+        """BFS with a category filter should skip non-matching branches.
+
+        When category='electronics', BFS scans only electronics products
+        (3 items), not all 10.
+        """
+        filters = SearchFilters(category="electronics")
+        result = retrieval.search(filters, strategy="bfs")
+        assert set(result.candidate_ids) == {"p5", "p6", "p7"}
+        # Scanned count should be the electronics products only
+        assert result.total_scanned == 3
+
+    def test_bfs_prunes_wrong_store(self, retrieval):
+        """BFS with a store filter should skip non-matching store branches."""
+        filters = SearchFilters(category="home", store="StoreC")
+        result = retrieval.search(filters, strategy="bfs")
+        assert set(result.candidate_ids) == {"p9"}
+        # Only scanned products under home/storec
+        assert result.total_scanned == 1
+
+
+class TestDFSTreeBehaviour:
+    """DFS should explore the tree depth-first with pruning."""
+
+    def test_dfs_prunes_wrong_category(self, retrieval):
+        """DFS with a category filter should prune non-matching branches."""
+        filters = SearchFilters(category="electronics")
+        result = retrieval.search(filters, strategy="dfs")
+        assert set(result.candidate_ids) == {"p5", "p6", "p7"}
+        assert result.total_scanned == 3
+
+    def test_dfs_same_candidates_as_bfs(self, retrieval):
+        """DFS and BFS should return the same candidate set."""
+        filters = SearchFilters(price_min=10, price_max=40, category="home")
+        bfs = retrieval.search(filters, strategy="bfs")
+        dfs = retrieval.search(filters, strategy="dfs")
+        assert set(bfs.candidate_ids) == set(dfs.candidate_ids)
+
+
+class TestPruningEfficiency:
+    """Pruning should reduce the number of products scanned."""
+
+    def test_category_pruning_scans_fewer(self, retrieval, sample_catalog):
+        """Filtering by category should scan fewer products than total catalog."""
+        total = len(sample_catalog)
+        # Electronics has 3 products, home has 7
+        elec_result = retrieval.search(
+            SearchFilters(category="electronics"), strategy="bfs"
+        )
+        assert elec_result.total_scanned < total
+
+    def test_no_filter_scans_all(self, retrieval, sample_catalog):
+        """Without filters, all strategies should scan every product."""
+        for strategy in ("linear", "bfs", "dfs", "priority"):
+            result = retrieval.search(SearchFilters(), strategy=strategy)
+            assert result.total_scanned == len(sample_catalog)
