@@ -3,9 +3,10 @@ Unit tests for CandidateRetrieval.
 """
 
 import pytest
-from src.module1.retrieval import CandidateRetrieval
+from src.module1.retrieval import CandidateRetrieval, SearchResult
 from src.module1.filters import SearchFilters
 from src.module1.catalog import Product, ProductCatalog
+from src.module1.exceptions import UnknownSearchStrategyError
 
 
 class TestCandidateRetrieval:
@@ -161,9 +162,9 @@ class TestSearchStrategies(TestCandidateRetrieval):
         assert set(candidates) == {"p1", "p2", "p4", "p8"}
     
     def test_invalid_strategy(self, retrieval):
-        """Should raise ValueError for unknown strategy."""
+        """Should raise UnknownSearchStrategyError for unknown strategy."""
         filters = SearchFilters()
-        with pytest.raises(ValueError, match="Unknown search strategy"):
+        with pytest.raises(UnknownSearchStrategyError, match="Unknown search strategy"):
             retrieval.search(filters, strategy="invalid")
     
     def test_store_filter(self, retrieval):
@@ -213,9 +214,9 @@ class TestSorting(TestCandidateRetrieval):
     def test_sort_with_max_results(self, retrieval):
         """Sorting + max_results should return top N sorted results."""
         filters = SearchFilters(category="home", sort_by="price_asc")
-        candidates = retrieval.search(filters, max_results=3)
-        assert len(candidates) == 3
-        prices = [retrieval.catalog[pid].price for pid in candidates]
+        result = retrieval.search(filters, max_results=3)
+        assert len(result) == 3
+        prices = [retrieval.catalog[pid].price for pid in result]
         # Should be the 3 cheapest home products
         assert prices == sorted(prices)
         assert prices[-1] <= 28.0  # 3rd cheapest home product
@@ -303,10 +304,11 @@ class TestSearchRecall(TestCandidateRetrieval):
         assert set(candidates) == expected
     
     def test_empty_result_when_no_matches(self, retrieval):
-        """Should return empty list when no products match."""
+        """Should return empty result when no products match."""
         filters = SearchFilters(category="furniture")
-        candidates = retrieval.search(filters)
-        assert candidates == []
+        result = retrieval.search(filters)
+        assert result.candidate_ids == []
+        assert result.count == 0
 
 
 class TestGetCandidatesWithProducts(TestCandidateRetrieval):

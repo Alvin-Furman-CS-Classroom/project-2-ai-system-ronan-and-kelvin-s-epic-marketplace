@@ -4,6 +4,7 @@ Unit tests for Product and ProductCatalog.
 
 import pytest
 from src.module1.catalog import Product, ProductCatalog
+from src.module1.exceptions import ProductValidationError, ProductNotFoundError
 
 
 class TestProduct:
@@ -52,7 +53,7 @@ class TestProduct:
     
     def test_invalid_negative_price(self):
         """Should reject negative price."""
-        with pytest.raises(ValueError, match="Price cannot be negative"):
+        with pytest.raises(ProductValidationError, match="Price cannot be negative"):
             Product(
                 id="p1", title="Test", price=-5.0,
                 category="test", seller_rating=4.0, store="X"
@@ -60,7 +61,7 @@ class TestProduct:
     
     def test_invalid_seller_rating_too_high(self):
         """Should reject seller rating > 5."""
-        with pytest.raises(ValueError, match="Seller rating must be 0-5"):
+        with pytest.raises(ProductValidationError, match="Seller rating must be 0-5"):
             Product(
                 id="p1", title="Test", price=10.0,
                 category="test", seller_rating=5.5, store="X"
@@ -68,7 +69,7 @@ class TestProduct:
     
     def test_invalid_seller_rating_negative(self):
         """Should reject negative seller rating."""
-        with pytest.raises(ValueError, match="Seller rating must be 0-5"):
+        with pytest.raises(ProductValidationError, match="Seller rating must be 0-5"):
             Product(
                 id="p1", title="Test", price=10.0,
                 category="test", seller_rating=-1.0, store="X"
@@ -240,9 +241,9 @@ class TestProductCatalog:
         assert product.title == "Plate"
     
     def test_getitem_keyerror(self, sample_products):
-        """Should raise KeyError for missing product with bracket access."""
+        """Should raise ProductNotFoundError for missing product with bracket access."""
         catalog = ProductCatalog(sample_products)
-        with pytest.raises(KeyError):
+        with pytest.raises(ProductNotFoundError):
             _ = catalog["p999"]
     
     def test_contains(self, sample_products):

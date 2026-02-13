@@ -193,8 +193,9 @@ def map_main_category(raw_category: Optional[str], categories: Optional[Iterable
         Target category label.
     """
     tokens = _collect_category_tokens(raw_category, categories)
+    joined = " ".join(tokens)
     for target, keywords in _KEYWORD_MAP.items():
-        if any(keyword in tokens for keyword in keywords):
+        if any(keyword in joined for keyword in keywords):
             return target
     return "other"
 

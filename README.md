@@ -186,10 +186,98 @@ pytest unit_tests/ -v --cov=src
 
 | Checkpoint | Date | Modules Included | Status | Evidence |
 | ---------- | ---- | ---------------- | ------ | -------- |
-| 1 | Feb 11 | Module 1 | In progress | `checkpoint_1_progression_report.md`, `checkpoint_preparation.md` |
+| 1 | Feb 11 | Module 1 | Complete | 122 tests (unit + integration), 4 search strategies, typed `SearchResult`, custom exceptions, structured logging, category index — see [Evidence of Usage](#evidence-of-usage) |
 | 2 | Feb 26 | Modules 1-2 |  |  |
 | 3 | Mar 19 | Modules 1-3 |  |  |
 | 4 | Apr 2 | Modules 1-4 |  |  |
+
+## Evidence of Usage
+
+### Sample Search Session
+
+```
+$ python demo_output.py
+
+src.module1.catalog | Catalog initialized with 8 products
+
+--- Example 1: Computers under $35 sorted by price ---
+src.module1.retrieval | strategy=linear filters={'price': [10, 35], 'category': 'Computers', 'sort_by': 'price_asc'} candidates=3 scanned=8 elapsed=0.01ms
+Candidates: ['B07ABC9876', 'B08GFTPQ5B', 'B03MNO8888']
+Count: 3  Strategy: linear  Scanned: 8  Elapsed: 0.01ms
+  B07ABC9876 | Laptop Stand Adjustable        | $24.50   | rating 4.8
+  B08GFTPQ5B | USB-C Hub Adapter              | $29.99   | rating 4.7
+  B03MNO8888 | Webcam HD 1080p                | $34.99   | rating 4.5
+
+--- Example 2: All categories, rating >= 4.5, sorted by rating ---
+src.module1.retrieval | strategy=priority filters={'seller_rating': '>=4.5', 'sort_by': 'rating_desc'} candidates=4 scanned=8 elapsed=0.01ms
+Candidates: ['B07ABC9876', 'B08GFTPQ5B', 'B05GHI7777', 'B03MNO8888']
+Count: 4  Strategy: priority  Scanned: 8  Elapsed: 0.01ms
+  B07ABC9876 | Laptop Stand Adjustable        | $24.50   | rating 4.8
+  B08GFTPQ5B | USB-C Hub Adapter              | $29.99   | rating 4.7
+  B05GHI7777 | Mechanical Keyboard            | $59.99   | rating 4.6
+  B03MNO8888 | Webcam HD 1080p                | $34.99   | rating 4.5
+
+--- Example 3: No matches (non-existent category) ---
+src.module1.retrieval | strategy=linear filters={'category': 'Furniture'} candidates=0 scanned=8 elapsed=0.00ms
+Candidates: []
+Count: 0
+```
+
+### Key Observations
+
+- **Structured logging** emits strategy, filter summary, hit/scan counts, and wall-time for every search call — ready for production monitoring.
+- **`SearchResult` dataclass** packages `candidate_ids`, `strategy`, `total_scanned`, and `elapsed_ms`, making downstream consumption explicit and type-safe.
+- **Four strategies** (linear, BFS, DFS, priority) are selectable per query and all produce identical candidate sets on the same filters.
+- **Custom exception hierarchy** (`InvalidFilterError`, `ProductNotFoundError`, …) replaces generic exceptions, simplifying error handling throughout the system.
+- **Category index** provides O(1) lookup by category, avoiding full scans when the caller already knows the target category.
+
+### Test Summary
+
+```
+$ pytest --tb=no -q
+
+122 passed in 1.66s
+```
+
+| Suite | Location | Count | Focus |
+| ----- | -------- | ----- | ----- |
+| Catalog | `unit_tests/module1/test_catalog.py` | 14 | CRUD, validation, category index |
+| Filters | `unit_tests/module1/test_filters.py` | 23 | Range, defaults, from_dict, errors |
+| Retrieval | `unit_tests/module1/test_retrieval.py` | 39 | Strategies, sorting, edge filters |
+| Edge Cases | `unit_tests/module1/test_edge_cases.py` | 23 | Boundary prices, empty catalogs, exception hierarchy |
+| Working Set | `unit_tests/data/test_working_set_builder.py` | 14 | Category classification, data pipeline |
+| Integration | `integration_tests/module1/test_module1_integration.py` | 9 | End-to-end pipeline, recall vs brute-force |
+
+## Checkpoint 1 Reflection
+
+Checkpoint 1 delivers Module 1 — Candidate Retrieval — the foundation that every
+later module builds on. The module accepts structured filters (price range,
+category, seller rating, location) plus a strategy selector and returns a typed
+`SearchResult` containing the matching product IDs along with search metadata.
+
+**What changed from the initial plan:**
+
+1. **Typed outputs** — Originally `search()` returned a plain `List[str]`.
+   Wrapping results in a frozen `SearchResult` dataclass makes the contract
+   explicit and lets downstream modules access metadata (strategy used, scan
+   count, elapsed time) without extra bookkeeping.
+
+2. **Custom exceptions** — Generic `ValueError` / `KeyError` raises were
+   replaced with a domain exception hierarchy rooted at `EpicMarketplaceError`.
+   This gives callers fine-grained `except` clauses and keeps error semantics
+   consistent as more modules are added.
+
+3. **Structured logging** — Every search call now emits a single structured log
+   line with strategy, filters, candidate count, scanned count, and wall-time.
+   This feeds directly into the evaluation work planned for Module 5.
+
+4. **Category index** — `ProductCatalog` now maintains an internal
+   `_category_index` (`defaultdict(list)`) that enables O(1) category lookups,
+   eliminating full-scan overhead when a category filter is present.
+
+5. **Comprehensive testing** — 122 tests (up from ~30 in the initial draft)
+   cover unit, edge-case, and integration scenarios, including parametrized
+   strategy-agreement checks that verify all four strategies return the same set.
 
 ## Required Workflow (Agent-Guided)
 

@@ -1,6 +1,8 @@
 .DS_Store
 *.env
 node_modules/
+web/node_modules/
+__pycache__/
 _pycache_/
 *.pyc
 .venv/

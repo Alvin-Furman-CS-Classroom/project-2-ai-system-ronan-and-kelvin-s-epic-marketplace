@@ -1,111 +1,180 @@
 """
 Integration tests for Module 1: Candidate Retrieval.
 
-Tests the full workflow: catalog -> filters -> retrieval -> candidate IDs.
+These tests verify end-to-end behaviour across the Module 1 components
+(catalog loading, filter construction, search execution) working together,
+rather than testing each class in isolation.
+
+They use an in-memory catalog built from fixture data (no external files
+required) and exercise the full search pipeline: filters -> retrieval -> result.
 """
 
-from pathlib import Path
-
 import pytest
-
 from src.module1.catalog import Product, ProductCatalog
 from src.module1.filters import SearchFilters
-from src.module1.retrieval import CandidateRetrieval
-from src.module1.loader import load_catalog_from_working_set
+from src.module1.retrieval import CandidateRetrieval, SearchResult
 
 
-class TestModule1FullWorkflow:
-    """Full workflow: create catalog, apply filters, retrieve candidates."""
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
-    def test_workflow_with_fixture_catalog(self):
-        """Full flow with programmatic catalog."""
-        products = [
-            Product(id="p1", title="Laptop", price=599.0, category="Computers", seller_rating=4.5, store="TechStore"),
-            Product(id="p2", title="Mouse", price=25.0, category="Accessories", seller_rating=4.8, store="TechStore"),
-            Product(id="p3", title="Keyboard", price=89.0, category="Accessories", seller_rating=4.2, store="OfficeCo"),
-            Product(id="p4", title="Monitor", price=199.0, category="Displays", seller_rating=4.6, store="TechStore"),
-            Product(id="p5", title="USB Hub", price=15.0, category="Accessories", seller_rating=4.9, store="OfficeCo"),
-        ]
-        catalog = ProductCatalog(products)
-        retrieval = CandidateRetrieval(catalog)
+@pytest.fixture
+def catalog() -> ProductCatalog:
+    """
+    A realistic 15-product catalog spanning three categories and four stores.
+    
+    Used to test the full pipeline without needing gzipped data files.
+    """
+    products = [
+        # --- Home ---
+        Product(id="H1", title="Ceramic Mug", price=18.00, category="Home & Kitchen", seller_rating=4.8, store="CraftCo"),
+        Product(id="H2", title="Glass Vase", price=35.00, category="Home & Kitchen", seller_rating=4.5, store="CraftCo"),
+        Product(id="H3", title="Wooden Bowl", price=45.00, category="Home & Kitchen", seller_rating=4.2, store="HomeGoods"),
+        Product(id="H4", title="Metal Lamp", price=60.00, category="Home & Kitchen", seller_rating=4.9, store="CraftCo"),
+        Product(id="H5", title="Plant Pot", price=22.00, category="Home & Kitchen", seller_rating=4.6, store="HomeGoods"),
+        # --- Electronics ---
+        Product(id="E1", title="Phone Case", price=15.00, category="Electronics", seller_rating=4.0, store="TechMart"),
+        Product(id="E2", title="USB Cable", price=8.00, category="Electronics", seller_rating=3.8, store="TechMart"),
+        Product(id="E3", title="Wireless Headphones", price=89.99, category="Electronics", seller_rating=4.7, store="AudioPlus"),
+        Product(id="E4", title="Bluetooth Speaker", price=45.00, category="Electronics", seller_rating=4.3, store="AudioPlus"),
+        Product(id="E5", title="Laptop Stand", price=32.00, category="Electronics", seller_rating=4.1, store="TechMart"),
+        # --- Books ---
+        Product(id="B1", title="Python Cookbook", price=42.00, category="Books", seller_rating=4.9, store="BookWorld"),
+        Product(id="B2", title="AI Fundamentals", price=55.00, category="Books", seller_rating=4.6, store="BookWorld"),
+        Product(id="B3", title="Data Structures", price=38.00, category="Books", seller_rating=4.4, store="BookWorld"),
+        Product(id="B4", title="Clean Code", price=35.00, category="Books", seller_rating=4.8, store="BookWorld"),
+        Product(id="B5", title="Design Patterns", price=48.00, category="Books", seller_rating=4.5, store="BookWorld"),
+    ]
+    return ProductCatalog(products)
 
-        filters = SearchFilters(
-            price_min=20.0,
-            price_max=200.0,
-            category="Accessories",
-            min_seller_rating=4.5,
-            sort_by="price_asc",
-        )
-        candidates = retrieval.search(filters)
 
-        # p2: 25, Accessories, 4.8 ✓. p5: 15 (below min 20) ✗. p3: rating 4.2 ✗.
-        assert set(candidates) == {"p2"}
-        assert candidates[0] == "p2"
+@pytest.fixture
+def retrieval(catalog) -> CandidateRetrieval:
+    return CandidateRetrieval(catalog)
 
-    def test_workflow_with_dict_filters(self):
-        """Filters from dict (README spec format)."""
-        products = [
-            Product(id="a1", title="Mug", price=18.0, category="home", seller_rating=4.8, store="StoreA"),
-            Product(id="a2", title="Vase", price=35.0, category="home", seller_rating=4.5, store="StoreA"),
-            Product(id="a3", title="Case", price=15.0, category="electronics", seller_rating=4.0, store="StoreB"),
-        ]
-        catalog = ProductCatalog(products)
-        retrieval = CandidateRetrieval(catalog)
 
-        filters = SearchFilters.from_dict({
-            "price": [10, 40],
-            "category": "home",
-            "seller_rating": ">=4.5",
+# ---------------------------------------------------------------------------
+# End-to-end pipeline tests
+# ---------------------------------------------------------------------------
+
+class TestEndToEndPipeline:
+    """Full pipeline: dict filters -> SearchFilters -> search -> SearchResult."""
+
+    def test_dict_to_search_result(self, retrieval):
+        """User-facing dict -> SearchFilters -> search -> typed result."""
+        raw_filters = {
+            "price": [10, 50],
+            "category": "Electronics",
+            "seller_rating": ">=4.0",
             "sort_by": "price_asc",
-        })
-        candidates = retrieval.search(filters)
+        }
+        filters = SearchFilters.from_dict(raw_filters)
+        result = retrieval.search(filters)
 
-        assert set(candidates) == {"a1", "a2"}
-        assert candidates == ["a1", "a2"]  # 18 before 35
+        assert isinstance(result, SearchResult)
+        assert result.count > 0
+        # All returned products must actually match
+        for pid in result:
+            product = retrieval.catalog[pid]
+            assert 10 <= product.price <= 50
+            assert product.category.lower() == "electronics"
+            assert product.seller_rating >= 4.0
+        # Verify sort order
+        prices = [retrieval.catalog[pid].price for pid in result]
+        assert prices == sorted(prices)
 
-    def test_workflow_candidates_feed_next_module(self):
-        """Candidate IDs structure matches Module 2 input spec."""
-        products = [
-            Product(id="p12", title="X", price=20.0, category="home", seller_rating=4.5, store="A"),
-            Product(id="p89", title="Y", price=30.0, category="home", seller_rating=4.5, store="A"),
-            Product(id="p203", title="Z", price=25.0, category="home", seller_rating=4.5, store="A"),
-        ]
-        catalog = ProductCatalog(products)
-        retrieval = CandidateRetrieval(catalog)
-
-        filters = SearchFilters(category="home", sort_by="price_asc")
-        candidate_ids = retrieval.search(filters)
-
-        assert isinstance(candidate_ids, list)
-        assert all(isinstance(pid, str) for pid in candidate_ids)
-        assert candidate_ids == ["p12", "p203", "p89"]
+    def test_roundtrip_filters_dict(self, retrieval):
+        """SearchFilters.from_dict -> .to_dict should be lossless."""
+        original = {
+            "price": [10, 50],
+            "category": "Books",
+            "seller_rating": ">=4.5",
+            "sort_by": "rating_desc",
+        }
+        filters = SearchFilters.from_dict(original)
+        roundtrip = filters.to_dict()
+        assert roundtrip["category"] == "Books"
+        assert roundtrip["sort_by"] == "rating_desc"
 
 
-class TestModule1WithRealData:
-    """Integration with real working set data (when available)."""
+class TestCrossComponentIntegration:
+    """Verify that catalog + filters + retrieval work together correctly."""
 
-    def test_load_and_search_working_set(self):
-        """Load catalog from working set and run search."""
-        repo_root = Path(__file__).resolve().parents[2]
-        working_set = repo_root / "datasets" / "working_set"
-        if not (working_set / "meta_Electronics_50000.jsonl.gz").exists():
-            pytest.skip("Working set not found")
+    def test_category_filter_matches_catalog_categories(self, catalog, retrieval):
+        """Every catalog category should be searchable."""
+        for category in catalog.categories:
+            result = retrieval.search(SearchFilters(category=category))
+            assert result.count > 0, f"No results for category '{category}'"
 
-        catalog = load_catalog_from_working_set(working_set_dir=working_set, max_products=100)
-        assert len(catalog) > 0
+    def test_store_filter_matches_catalog_stores(self, catalog, retrieval):
+        """Every catalog store should be searchable."""
+        for store in catalog.stores:
+            result = retrieval.search(SearchFilters(store=store))
+            assert result.count > 0, f"No results for store '{store}'"
 
-        retrieval = CandidateRetrieval(catalog)
+    def test_no_false_positives(self, retrieval):
+        """Every returned candidate must satisfy ALL filters."""
+        filters = SearchFilters(
+            price_min=20, price_max=50,
+            category="Books",
+            min_seller_rating=4.5,
+        )
+        result = retrieval.search(filters)
+        for pid in result:
+            p = retrieval.catalog[pid]
+            assert p.price >= 20
+            assert p.price <= 50
+            assert p.category.lower() == "books"
+            assert p.seller_rating >= 4.5
 
-        # Filter by category if we have known categories
-        categories = catalog.categories
-        if categories:
-            filters = SearchFilters(
-                category=categories[0],
-                price_max=1000.0,
-                sort_by="price_asc",
+    def test_recall_against_brute_force(self, catalog, retrieval):
+        """Search recall should be 100 % for an in-memory catalog."""
+        filters = SearchFilters(price_min=30, price_max=60, min_seller_rating=4.4)
+        result = retrieval.search(filters)
+
+        # Brute-force expected set
+        expected = {
+            p.id for p in catalog
+            if 30 <= p.price <= 60 and p.seller_rating >= 4.4
+        }
+        assert set(result.candidate_ids) == expected
+
+
+class TestStrategiesAgreement:
+    """All strategies must produce the same candidate set."""
+
+    def test_all_strategies_same_set(self, retrieval):
+        filters = SearchFilters(
+            price_min=15, price_max=50, category="Electronics",
+        )
+        results = {
+            strategy: set(retrieval.search(filters, strategy=strategy).candidate_ids)
+            for strategy in CandidateRetrieval.STRATEGIES
+        }
+        reference = results["linear"]
+        for strategy, ids in results.items():
+            assert ids == reference, (
+                f"{strategy} returned {ids}, expected {reference}"
             )
-            candidates = retrieval.search(filters, max_results=5)
-            assert isinstance(candidates, list)
-            assert len(candidates) <= 5
-            for pid in candidates:
-                assert pid in catalog
+
+
+class TestSortedOutputIntegrity:
+    """Sorted results should be consistent across strategies."""
+
+    def test_price_asc_deterministic(self, retrieval):
+        filters = SearchFilters(category="Books", sort_by="price_asc")
+        result = retrieval.search(filters)
+        prices = [retrieval.catalog[pid].price for pid in result]
+        assert prices == sorted(prices)
+        assert result.count == 5  # all five books
+
+    def test_max_results_returns_cheapest(self, retrieval):
+        """max_results=3 with price_asc should yield the 3 cheapest."""
+        filters = SearchFilters(category="Books", sort_by="price_asc")
+        result = retrieval.search(filters, max_results=3)
+        assert result.count == 3
+        prices = [retrieval.catalog[pid].price for pid in result]
+        assert prices == sorted(prices)
+        # The 3 cheapest books: 35, 38, 42
+        assert prices == [35.0, 38.0, 42.0]

@@ -7,6 +7,8 @@ Defines the hard constraints that products must satisfy to be candidates.
 from dataclasses import dataclass
 from typing import List, Optional
 
+from .exceptions import InvalidFilterError
+
 
 # Valid sort options for search results
 SORT_OPTIONS = ("price_asc", "price_desc", "rating_desc", "rating_asc")
@@ -48,18 +50,20 @@ class SearchFilters:
     def __post_init__(self):
         """Validate filter values."""
         if self.price_min is not None and self.price_min < 0:
-            raise ValueError("price_min cannot be negative")
+            raise InvalidFilterError("price_min cannot be negative")
         if self.price_max is not None and self.price_max < 0:
-            raise ValueError("price_max cannot be negative")
+            raise InvalidFilterError("price_max cannot be negative")
         if self.price_min is not None and self.price_max is not None:
             if self.price_min > self.price_max:
-                raise ValueError("price_min cannot exceed price_max")
+                raise InvalidFilterError("price_min cannot exceed price_max")
         if self.min_seller_rating is not None:
             if not (0 <= self.min_seller_rating <= 5):
-                raise ValueError("min_seller_rating must be between 0 and 5")
+                raise InvalidFilterError(
+                    "min_seller_rating must be between 0 and 5"
+                )
         if self.sort_by is not None:
             if self.sort_by not in SORT_OPTIONS:
-                raise ValueError(
+                raise InvalidFilterError(
                     f"sort_by must be one of {SORT_OPTIONS}, got '{self.sort_by}'"
                 )
     

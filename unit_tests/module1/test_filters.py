@@ -4,6 +4,7 @@ Unit tests for SearchFilters.
 
 import pytest
 from src.module1.filters import SearchFilters, SORT_OPTIONS
+from src.module1.exceptions import InvalidFilterError
 
 
 class TestSearchFilters:
@@ -44,32 +45,32 @@ class TestSearchFilters:
     
     def test_invalid_negative_price_min(self):
         """Should reject negative price_min."""
-        with pytest.raises(ValueError, match="price_min cannot be negative"):
+        with pytest.raises(InvalidFilterError, match="price_min cannot be negative"):
             SearchFilters(price_min=-5.0)
     
     def test_invalid_negative_price_max(self):
         """Should reject negative price_max."""
-        with pytest.raises(ValueError, match="price_max cannot be negative"):
+        with pytest.raises(InvalidFilterError, match="price_max cannot be negative"):
             SearchFilters(price_max=-10.0)
     
     def test_invalid_price_range(self):
         """Should reject price_min > price_max."""
-        with pytest.raises(ValueError, match="price_min cannot exceed price_max"):
+        with pytest.raises(InvalidFilterError, match="price_min cannot exceed price_max"):
             SearchFilters(price_min=50.0, price_max=10.0)
     
     def test_invalid_seller_rating_too_high(self):
         """Should reject seller rating > 5."""
-        with pytest.raises(ValueError, match="min_seller_rating must be between 0 and 5"):
+        with pytest.raises(InvalidFilterError, match="min_seller_rating must be between 0 and 5"):
             SearchFilters(min_seller_rating=5.5)
     
     def test_invalid_seller_rating_negative(self):
         """Should reject negative seller rating."""
-        with pytest.raises(ValueError, match="min_seller_rating must be between 0 and 5"):
+        with pytest.raises(InvalidFilterError, match="min_seller_rating must be between 0 and 5"):
             SearchFilters(min_seller_rating=-1.0)
     
     def test_invalid_sort_by(self):
         """Should reject invalid sort_by value."""
-        with pytest.raises(ValueError, match="sort_by must be one of"):
+        with pytest.raises(InvalidFilterError, match="sort_by must be one of"):
             SearchFilters(sort_by="invalid")
     
     def test_valid_sort_options(self):
