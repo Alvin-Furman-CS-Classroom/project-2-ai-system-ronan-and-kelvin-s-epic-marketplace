@@ -347,7 +347,7 @@ class TestRetrievalEdgeCases(TestCandidateRetrieval):
         retrieval = CandidateRetrieval(catalog)
         filters = SearchFilters()
         candidates = retrieval.search(filters)
-        assert candidates == []
+        assert candidates.candidate_ids == []
 
     def test_single_product_catalog(self):
         """Search on single-product catalog."""
@@ -357,7 +357,7 @@ class TestRetrievalEdgeCases(TestCandidateRetrieval):
         retrieval = CandidateRetrieval(catalog)
         filters = SearchFilters(category="home")
         candidates = retrieval.search(filters)
-        assert candidates == ["p1"]
+        assert candidates.candidate_ids == ["p1"]
 
     def test_single_product_no_match(self):
         """Single product that doesn't match returns empty."""
@@ -367,7 +367,7 @@ class TestRetrievalEdgeCases(TestCandidateRetrieval):
         retrieval = CandidateRetrieval(catalog)
         filters = SearchFilters(category="electronics")
         candidates = retrieval.search(filters)
-        assert candidates == []
+        assert candidates.candidate_ids == []
 
     def test_price_exactly_at_min_boundary(self, retrieval, sample_catalog):
         """Product with price exactly at price_min should match."""
@@ -394,7 +394,7 @@ class TestRetrievalEdgeCases(TestCandidateRetrieval):
         """max_results=0 should return empty list."""
         filters = SearchFilters(category="home")
         candidates = retrieval.search(filters, max_results=0)
-        assert candidates == []
+        assert candidates.candidate_ids == []
 
 
 class TestStrategyEquivalence(TestCandidateRetrieval):
@@ -412,10 +412,10 @@ class TestStrategyEquivalence(TestCandidateRetrieval):
     def test_strategies_return_same_set_with_sort(self, retrieval):
         """With sort_by, all strategies should return same IDs in same order."""
         filters = SearchFilters(category="electronics", sort_by="price_asc")
-        linear = retrieval.search(filters, strategy="linear")
-        bfs = retrieval.search(filters, strategy="bfs")
-        dfs = retrieval.search(filters, strategy="dfs")
-        priority = retrieval.search(filters, strategy="priority")
+        linear = retrieval.search(filters, strategy="linear").candidate_ids
+        bfs = retrieval.search(filters, strategy="bfs").candidate_ids
+        dfs = retrieval.search(filters, strategy="dfs").candidate_ids
+        priority = retrieval.search(filters, strategy="priority").candidate_ids
         assert linear == bfs == dfs == priority
 
     def test_strategies_with_max_results_same_count(self, retrieval):
