@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Package, Store, Tag } from "lucide-react";
 import { fetchProduct } from "../api";
 import type { Product } from "../types";
@@ -13,6 +13,7 @@ const PLACEHOLDER =
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,13 +60,13 @@ export default function ProductDetailPage() {
 
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
         {/* Breadcrumb */}
-        <Link
-          to="/search"
-          className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-brand)]"
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-brand)] cursor-pointer"
         >
           <ArrowLeft size={14} />
           Back to results
-        </Link>
+        </button>
 
         <div className="grid gap-10 md:grid-cols-2">
           {/* Image */}
