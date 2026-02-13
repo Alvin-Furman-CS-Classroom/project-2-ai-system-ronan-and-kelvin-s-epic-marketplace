@@ -3,6 +3,7 @@
 **Module:** Module 1 — Candidate Retrieval  
 **Date:** February 13, 2026  
 **Reviewed files:** `src/module1/catalog.py`, `src/module1/filters.py`, `src/module1/retrieval.py`, `src/module1/loader.py`, `src/module1/exceptions.py`, `src/module1/__init__.py`
+*(Note: `simple_search.py` was identified as dead code — it imported pandas but was never used by the module — and was deleted.)*
 
 ---
 
@@ -18,11 +19,11 @@ Module 1 demonstrates professional-grade code quality throughout. The codebase i
 
 Names are descriptive, consistent, and follow PEP 8 throughout:
 
-- **Classes:** `Product`, `ProductCatalog`, `CandidateRetrieval`, `SearchResult`, `SearchFilters`, `SearchState` — clear, intention-revealing nouns.
+- **Classes:** `Product`, `ProductCatalog`, `CandidateRetrieval`, `SearchResult`, `SearchFilters`, `SearchNode` — clear, intention-revealing nouns.
 - **Methods:** `matches_filters()`, `add_product()`, `get_ids_by_category()`, `compute_seller_ratings()` — action-oriented verbs describing exactly what they do.
 - **Variables:** `candidate_ids`, `seller_rating`, `price_min`, `total_scanned`, `elapsed_ms` — no ambiguity, no unnecessary abbreviations.
 - **Constants:** `SORT_OPTIONS`, `STRATEGIES` — uppercase per convention.
-- **Private methods:** `_linear_search()`, `_bfs_search()`, `_dfs_search()`, `_priority_search()`, `_compute_priority()`, `_sort_candidates()` — leading underscore signals internal use.
+- **Private methods:** `_linear_search()`, `_bfs_search()`, `_dfs_search()`, `_priority_search()`, `_compute_priority()`, `_sort_candidates()`, `_build_search_tree()`, `_can_prune_node()` — leading underscore signals internal use.
 - **Module names:** `catalog.py`, `filters.py`, `retrieval.py`, `loader.py`, `exceptions.py` — each clearly maps to its domain concept.
 
 No single-letter variables observed. No misleading names. Names reveal intent without needing comments.
@@ -69,8 +70,8 @@ Code style is consistent across all files:
 
 The codebase is clean:
 
-- **No dead code** — every function and class is used. No commented-out blocks.
-- **No duplication** — the filter-checking logic exists only in `matches_filters()`, referenced by all four strategies. Sorting logic exists only in `_sort_candidates()`.
+- **No dead code** — every function and class is used. No commented-out blocks. The previously existing `simple_search.py` (unused legacy file that imported pandas) was identified and removed.
+- **No duplication** — the filter-checking logic exists only in `matches_filters()`, referenced by all four strategies. Sorting logic exists only in `_sort_candidates()`. Tree construction happens once in `_build_search_tree()`.
 - **Named constants:** `SORT_OPTIONS` and `STRATEGIES` are defined as tuples and referenced in validation. No magic numbers in filter validation.
 - **Heuristic penalties** in `_compute_priority()` (100, 75, 10) are localized to one function and documented in the docstring — clean and maintainable.
 - **No leftover imports**, no unused variables, no commented-out code blocks.
@@ -83,14 +84,15 @@ Control flow is clear, logical, and readable:
 - **Early returns** in `matches_filters()` — returns `False` as soon as any constraint fails, avoiding nested if-blocks.
 - **Strategy dispatch** in `search()` uses simple if/elif chain (4 branches), raising an exception for unknown strategies.
 - **Nesting** never exceeds 3 levels anywhere in the codebase.
-- **Loop structures** are straightforward: BFS uses `deque.popleft()`, DFS uses `list.pop()`, priority uses `heapq.heappop()` — each is the canonical data structure pattern.
+- **Loop structures** are straightforward: BFS uses `deque.popleft()` to traverse the Category→Store→Product tree level by level, DFS uses `list.pop()` for depth-first traversal of the same tree, priority uses `heapq.heappop()` — each is the canonical data structure pattern.
+- **Branch pruning** via `_can_prune_node()` keeps control flow simple: a single early `continue` skips non-matching subtrees, avoiding nested conditionals.
 - Complex conditions in `from_amazon_meta()` are broken into sequential checks, each clearly readable.
 
 ### 7. Pythonic Idioms — **4/4**
 
 Code leverages Python idioms effectively throughout:
 
-- **Dataclasses** for `Product`, `SearchResult`, `SearchFilters`, `SearchState` — avoids boilerplate `__init__`.
+- **Dataclasses** for `Product`, `SearchResult`, `SearchFilters`, `SearchNode` — avoids boilerplate `__init__`.
 - **`frozen=True`** on `SearchResult` for immutability — proper use of dataclass features.
 - **`__post_init__`** for validation — idiomatic dataclass pattern.
 - **`defaultdict(list)`** for category index and store rating aggregation.

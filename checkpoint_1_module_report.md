@@ -3,13 +3,13 @@
 **Module:** Module 1 — Candidate Retrieval  
 **Date:** February 13, 2026  
 **Team:** Kelvin Bonsu & Ronan  
-**Total Tests:** 170 passing (0 failures)
+**Total Tests:** 182 passing (0 failures)
 
 ---
 
 ## Summary
 
-Module 1 is fully functional, comprehensively tested, and demonstrates deep engagement with uninformed and informed search algorithms. The module cleanly defines inputs (search filters + catalog) and outputs (ranked candidate IDs wrapped in an immutable SearchResult), with excellent documentation, a professional exception hierarchy, and strong GitHub collaboration practices. All 170 tests pass, covering core functionality, edge cases, error conditions, and cross-strategy integration.
+Module 1 is fully functional, comprehensively tested, and demonstrates deep engagement with uninformed and informed search algorithms. The catalog is modelled as a **Category → Store → Product search tree**, and BFS/DFS traverse that tree with branch-pruning — a genuine application of tree-search concepts. The module cleanly defines inputs (search filters + catalog) and outputs (ranked candidate IDs wrapped in an immutable SearchResult), with excellent documentation, a professional exception hierarchy, and strong GitHub collaboration practices. All 182 tests pass, covering core functionality, edge cases, error conditions, tree-structure validation, pruning efficiency, and cross-strategy integration.
 
 ---
 
@@ -19,7 +19,7 @@ Module 1 is fully functional, comprehensively tested, and demonstrates deep enga
 
 All features work correctly with graceful edge-case handling:
 
-- **Four search strategies implemented and working:** Linear scan, BFS (breadth-first with queue), DFS (depth-first with stack), Priority search (A*-style with min-heap and heuristic). All four return correct results for all test cases.
+- **Four search strategies implemented and working:** Linear scan, BFS (breadth-first traversal of Category→Store→Product tree with pruning), DFS (depth-first traversal of the same tree with pruning), Priority search (A*-style with min-heap and heuristic). All four return correct results for all test cases.
 - **Five filter types:** price range (min/max), category (case-insensitive), minimum seller rating, store name (case-insensitive), sort order (price asc/desc, rating asc/desc). All enforce hard constraints correctly.
 - **Sorting works correctly:** Applied after filtering, before max_results truncation — ensures sorted results respect limits.
 - **Edge cases handled:**
@@ -33,14 +33,14 @@ All features work correctly with graceful edge-case handling:
   - Impossible filter combination → empty result (no crash)
 - **Data loading works:** Reads gzipped Amazon JSONL, computes seller ratings from reviews, handles missing/malformed data gracefully (returns `None`, no crashes).
 - **Real-world dataset:** Successfully loads and searches 18,255 Amazon products.
-- **No crashes or unexpected behavior** across 170 test cases.
+- **No crashes or unexpected behavior** across 182 test cases.
 
 ### 2. Code Elegance and Quality — **8/8**
 
 See `checkpoint_1_elegance_report.md` for detailed assessment. Perfect score of **4.0/4.0** across all 8 code elegance criteria.
 
 Key strengths:
-- Clean separation across 6 files, each with a single responsibility
+- Clean separation across 5 source files plus `__init__.py`, each with a single responsibility (dead `simple_search.py` removed)
 - Descriptive naming throughout (PEP 8 compliant)
 - Custom exception hierarchy for precise error handling
 - Dataclasses used idiomatically for data containers
@@ -50,16 +50,18 @@ Key strengths:
 
 ### 3. Testing — **8/8**
 
-Comprehensive test coverage with 170 tests across unit and integration test suites:
+Comprehensive test coverage with 182 tests across unit and integration test suites:
 
-**Unit Tests (161 tests):**
+**Unit Tests (173 tests):**
 
 | Test File | Count | What Is Tested |
 |-----------|-------|----------------|
-| `test_catalog.py` | ~30 | Product creation, validation errors, `from_dict`/`to_dict` round-trips, Amazon meta conversion, missing fields, catalog CRUD, container protocol, category index |
-| `test_filters.py` | ~23 | Default values, valid ranges, validation errors (negative prices, inverted ranges, bad rating, bad sort), `from_dict` with lists/dicts/strings, `to_dict` round-trips |
-| `test_retrieval.py` | ~73 | Filter matching (12 scenarios), all 4 strategies return correct results, sorting (price/rating asc/desc), max_results enforcement, search recall, convenience methods, edge cases (empty/single catalog, boundary prices, boundary ratings), strategy equivalence, priority heuristic behavior |
-| `test_working_set_builder.py` | ~4 | Category mapping rules, ML model training + prediction |
+| `test_catalog.py` | 40 | Product creation, validation errors, `from_dict`/`to_dict` round-trips, Amazon meta conversion, missing fields, catalog CRUD, container protocol, category index |
+| `test_filters.py` | 29 | Default values, valid ranges, validation errors (negative prices, inverted ranges, bad rating, bad sort), `from_dict` with lists/dicts/strings, `to_dict` round-trips |
+| `test_retrieval.py` | 55 | Filter matching (12 scenarios), all 4 strategies return correct results, sorting (price/rating asc/desc), max_results enforcement, search recall, convenience methods, strategy equivalence, priority heuristic behavior |
+| `test_edge_cases.py` | 35 | Boundary prices, empty/single catalog, search-result metadata, category index, strategy consistency, exception hierarchy, **search-tree structure** (root node, depths, category coverage, empty catalog), **BFS/DFS tree behaviour** (category/store pruning, scan counts), **pruning efficiency** (fewer scans with filters vs. without) |
+| `test_loader.py` | 10 | Seller rating computation, catalog loading from meta, max_products, invalid product skipping, working set loading |
+| `test_working_set_builder.py` | 4 | Category mapping rules, ML model training + prediction |
 
 **Integration Tests (9 tests):**
 
@@ -80,7 +82,7 @@ Comprehensive test coverage with 170 tests across unit and integration test suit
 - Tests are isolated (use fixtures, not shared mutable state)
 - Clear distinction between unit tests and integration tests (separate directories)
 - Descriptive test names and docstrings explain each test's purpose
-- Tests grouped logically by class (`TestMatchesFilters`, `TestSearchStrategies`, `TestSorting`, `TestRetrievalEdgeCases`, `TestStrategyEquivalence`, etc.)
+- Tests grouped logically by class (`TestMatchesFilters`, `TestSearchStrategies`, `TestSorting`, `TestStrategyEquivalence`, `TestSearchTree`, `TestBFSTreeBehaviour`, `TestDFSTreeBehaviour`, `TestPruningEfficiency`, etc.)
 - Shared fixtures in `conftest.py` (10 sample products, pre-built catalog and retrieval)
 - Edge cases and error conditions thoroughly covered
 
@@ -133,7 +135,8 @@ Inputs and outputs are crystal clear and easy to verify:
 
 Deep engagement with search algorithms and AI search concepts:
 
-- **Uninformed search:** BFS (queue-based breadth-first) and DFS (stack-based depth-first) are correctly implemented with the canonical data structures (`deque` and `list`). Both use visited sets to prevent re-processing.
+- **Search tree model:** The product catalog is modelled as a **Category → Store → Product tree** using `SearchNode` dataclasses. `_build_search_tree()` constructs the tree at initialization time. This gives BFS and DFS a genuine tree to traverse rather than a flat list — aligning directly with AI tree-search theory.
+- **Uninformed search with pruning:** BFS (queue-based breadth-first) and DFS (stack-based depth-first) traverse the search tree with the canonical data structures (`deque` and `list`). `_can_prune_node()` skips entire category or store branches that cannot match the active filters — a direct application of branch pruning. Tests verify that pruning reduces `total_scanned` compared to unfiltered search.
 - **Informed search:** Priority search uses a **min-heap** with a custom **heuristic function** (`_compute_priority`) that estimates how close a product is to matching the filters. This is an A*-style informed search where:
   - Priority 0 = perfect match candidate
   - Penalties accumulate for: wrong category (+100), wrong store (+75), price outside range (proportional distance), low rating (gap × 10)
@@ -144,19 +147,21 @@ Deep engagement with search algorithms and AI search concepts:
 - **Filter system** models hard constraints, a concept that maps directly to constraint satisfaction in AI.
 - **Integration tests verify strategy equivalence** — confirming that all algorithms produce identical results, which is a core correctness property in search.
 
-The implementation reflects genuine understanding of how search algorithms work, why different strategies have different trade-offs (time vs. optimality vs. space), and how to apply them to a real-world product retrieval problem.
+The implementation reflects genuine understanding of how search algorithms work, why different strategies have different trade-offs (time vs. optimality vs. space), and how to apply them to a real-world product retrieval problem. The tree-based BFS/DFS with pruning goes beyond a textbook flat-list traversal and demonstrates how these algorithms work on hierarchical data in practice.
 
 ### 8. GitHub Practices — **4/4**
 
 Excellent development practices throughout:
 
-- **Meaningful commit messages** that explain what and why: `"Module 1: remove location, add seller rating, store filter, sorting"`, `"feat: full-stack marketplace UI with React + FastAPI + pagination"`, `"fix: back-to-results preserves search filters and page"`, `"docs: add evidence-of-usage section, checkpoint reflection"`
+- **Meaningful commit messages** that explain what and why: `"feat: model catalog as Category→Store→Product search tree for BFS/DFS"`, `"test: add 12 search-tree structure and pruning tests"`, `"docs: add Args/Returns docstrings to all public methods"`, `"docs: fix stale 'location' references in README, update spec to use 'store'"`, `"fix: update test assertions for SearchResult return type"`
 - **Commits are appropriately sized** — not too large, not trivially small. Each commit represents a logical unit of work.
-- **Logical progression of work** is evident: initial setup → data loading → core features → tests → production polish → API layer → frontend.
+- **Logical progression of work** is evident: initial setup → data loading → core features → tests → production polish → API layer → frontend → search-tree refactor → pruning tests.
+- **Feature branch workflow:** Improvements developed on `fix/checkpoint1-rubric-improvements` branch with a pull request for review before merging to `main`.
 - **Repository structure** follows the project specification exactly (`src/`, `unit_tests/`, `integration_tests/`, `AGENTS.md`, `README.md`).
 - **`.gitignore`** properly configured for Python and Node.js artifacts.
-- **Active pull request** (Feedback PR #1) demonstrates use of GitHub's collaboration features.
+- **Active pull requests** demonstrate use of GitHub's collaboration features and code review.
 - **`pyproject.toml`** configures linting and testing tools for consistent development practices.
+- **Dead code removed:** `simple_search.py` (unused legacy file importing pandas) deleted to keep the codebase clean.
 - **Merge conflicts resolved** thoughtfully (visible in merge commits).
 
 ---
