@@ -5,7 +5,7 @@
 Epic Marketplace is a small business marketplace search system that helps shoppers
 find the right product using search, NLP, and supervised learning. Users
 provide a free-text query plus structured filters (price range, category,
-seller rating, and location). The system first retrieves candidates with
+seller rating, and store). The system first retrieves candidates with
 classic search, then applies heuristic re-ranking from advanced search
 techniques. It parses the query with NLP to extract keywords and embeddings
 that enrich product features. A learning-to-rank model trains on click or
@@ -40,11 +40,11 @@ Your system must include 5-6 modules. Fill in the table below as you plan each m
 
 ### Module 1: Candidate Retrieval (Search)
 
-**Inputs:** `filters` (price range, category, seller rating, location), product catalog  
-Example: `filters={"price":[10,40],"category":"home","seller_rating":">=4.5","location":"Boston"}`
+**Inputs:** `SearchFilters` (price range, category, seller rating, store), `ProductCatalog`  
+Example: `filters={"price":[10,40],"category":"Computers","seller_rating":">=4.5","store":"Anker"}`
 
-**Outputs:** `candidate_ids` (products satisfying hard constraints)  
-Example: `candidate_ids=["p12","p89","p203"]`
+**Outputs:** `SearchResult` (frozen dataclass with `candidate_ids`, `strategy`, `total_scanned`, `elapsed_ms`)  
+Example: `SearchResult(candidate_ids=["B07ABC9876","B08GFTPQ5B"], strategy="linear", total_scanned=8, elapsed_ms=0.01)`
 
 **Dependencies:** Search unit (uninformed/informed search)
 
@@ -149,17 +149,18 @@ from src.module1 import CandidateRetrieval, SearchFilters, ProductCatalog, Produ
 
 # Create sample catalog
 products = [
-    Product(id='p1', title='Ceramic Mug', price=18.0, category='home', seller_rating=4.8, location='Boston'),
-    Product(id='p2', title='Glass Vase', price=35.0, category='home', seller_rating=4.5, location='Boston'),
-    Product(id='p3', title='Phone Case', price=15.0, category='electronics', seller_rating=4.0, location='LA'),
+    Product(id='p1', title='Ceramic Mug', price=18.0, category='home', seller_rating=4.8, store='MugShop'),
+    Product(id='p2', title='Glass Vase', price=35.0, category='home', seller_rating=4.5, store='MugShop'),
+    Product(id='p3', title='Phone Case', price=15.0, category='electronics', seller_rating=4.0, store='TechCo'),
 ]
 catalog = ProductCatalog(products)
 
 # Search with filters
 retrieval = CandidateRetrieval(catalog)
-filters = SearchFilters(price_min=10, price_max=40, category='home', location='Boston')
-candidates = retrieval.search(filters)
-print(f'Candidates: {candidates}')
+filters = SearchFilters(price_min=10, price_max=40, category='home', store='MugShop')
+result = retrieval.search(filters)
+print(f'Candidates: {result.candidate_ids}')  # ['p1', 'p2']
+print(f'Strategy: {result.strategy}, Scanned: {result.total_scanned}')
 "
 ```
 
@@ -186,7 +187,7 @@ pytest unit_tests/ -v --cov=src
 
 | Checkpoint | Date | Modules Included | Status | Evidence |
 | ---------- | ---- | ---------------- | ------ | -------- |
-| 1 | Feb 11 | Module 1 | Complete | 122 tests (unit + integration), 4 search strategies, typed `SearchResult`, custom exceptions, structured logging, category index — see [Evidence of Usage](#evidence-of-usage) |
+| 1 | Feb 11 | Module 1 | Complete | 182 tests (unit + integration), 4 search strategies over category tree, typed `SearchResult`, custom exceptions, structured logging, category index, BFS/DFS pruning — see [Evidence of Usage](#evidence-of-usage) |
 | 2 | Feb 26 | Modules 1-2 |  |  |
 | 3 | Mar 19 | Modules 1-3 |  |  |
 | 4 | Apr 2 | Modules 1-4 |  |  |
@@ -228,6 +229,7 @@ Count: 0
 - **Structured logging** emits strategy, filter summary, hit/scan counts, and wall-time for every search call — ready for production monitoring.
 - **`SearchResult` dataclass** packages `candidate_ids`, `strategy`, `total_scanned`, and `elapsed_ms`, making downstream consumption explicit and type-safe.
 - **Four strategies** (linear, BFS, DFS, priority) are selectable per query and all produce identical candidate sets on the same filters.
+- **Search-tree model** — The catalog is structured as a Category → Store → Product tree. BFS explores breadth-first (all categories, then stores, then products). DFS dives deep into one branch before backtracking. Both prune non-matching category/store subtrees for efficiency.
 - **Custom exception hierarchy** (`InvalidFilterError`, `ProductNotFoundError`, …) replaces generic exceptions, simplifying error handling throughout the system.
 - **Category index** provides O(1) lookup by category, avoiding full scans when the caller already knows the target category.
 
@@ -236,48 +238,57 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-122 passed in 1.66s
+182 passed in 2.64s
 ```
 
 | Suite | Location | Count | Focus |
 | ----- | -------- | ----- | ----- |
 | Catalog | `unit_tests/module1/test_catalog.py` | 14 | CRUD, validation, category index |
 | Filters | `unit_tests/module1/test_filters.py` | 23 | Range, defaults, from_dict, errors |
-| Retrieval | `unit_tests/module1/test_retrieval.py` | 39 | Strategies, sorting, edge filters |
-| Edge Cases | `unit_tests/module1/test_edge_cases.py` | 23 | Boundary prices, empty catalogs, exception hierarchy |
-| Working Set | `unit_tests/data/test_working_set_builder.py` | 14 | Category classification, data pipeline |
+| Retrieval | `unit_tests/module1/test_retrieval.py` | 55 | Strategies, sorting, edge filters, heuristic |
+| Edge Cases | `unit_tests/module1/test_edge_cases.py` | 35 | Boundaries, empty catalogs, exception hierarchy, search-tree structure, BFS/DFS pruning |
+| Loader | `unit_tests/module1/test_loader.py` | 10 | Seller ratings, load catalog, max_products |
+| Working Set | `unit_tests/data/test_working_set_builder.py` | 4 | Category classification, data pipeline |
 | Integration | `integration_tests/module1/test_module1_integration.py` | 9 | End-to-end pipeline, recall vs brute-force |
 
 ## Checkpoint 1 Reflection
 
 Checkpoint 1 delivers Module 1 — Candidate Retrieval — the foundation that every
 later module builds on. The module accepts structured filters (price range,
-category, seller rating, location) plus a strategy selector and returns a typed
+category, seller rating, store) plus a strategy selector and returns a typed
 `SearchResult` containing the matching product IDs along with search metadata.
 
 **What changed from the initial plan:**
 
-1. **Typed outputs** — Originally `search()` returned a plain `List[str]`.
+1. **Search-tree model** — Originally BFS and DFS operated on a flat product
+   list. The catalog is now modelled as a three-level tree
+   (Category → Store → Product). BFS explores level-by-level (all categories
+   first) while DFS dives deep into one branch before backtracking. Both
+   strategies prune subtrees that cannot match the active filters, so
+   category-filtered searches scan only the relevant products.
+
+2. **Typed outputs** — Originally `search()` returned a plain `List[str]`.
    Wrapping results in a frozen `SearchResult` dataclass makes the contract
    explicit and lets downstream modules access metadata (strategy used, scan
    count, elapsed time) without extra bookkeeping.
 
-2. **Custom exceptions** — Generic `ValueError` / `KeyError` raises were
+3. **Custom exceptions** — Generic `ValueError` / `KeyError` raises were
    replaced with a domain exception hierarchy rooted at `EpicMarketplaceError`.
    This gives callers fine-grained `except` clauses and keeps error semantics
    consistent as more modules are added.
 
-3. **Structured logging** — Every search call now emits a single structured log
+4. **Structured logging** — Every search call now emits a single structured log
    line with strategy, filters, candidate count, scanned count, and wall-time.
    This feeds directly into the evaluation work planned for Module 5.
 
-4. **Category index** — `ProductCatalog` now maintains an internal
+5. **Category index** — `ProductCatalog` now maintains an internal
    `_category_index` (`defaultdict(list)`) that enables O(1) category lookups,
    eliminating full-scan overhead when a category filter is present.
 
-5. **Comprehensive testing** — 122 tests (up from ~30 in the initial draft)
-   cover unit, edge-case, and integration scenarios, including parametrized
-   strategy-agreement checks that verify all four strategies return the same set.
+6. **Comprehensive testing** — 182 tests (up from ~30 in the initial draft)
+   cover unit, edge-case, search-tree structure, pruning behaviour, and
+   integration scenarios, including parametrized strategy-agreement checks that
+   verify all four strategies return the same candidate set.
 
 ## Required Workflow (Agent-Guided)
 
