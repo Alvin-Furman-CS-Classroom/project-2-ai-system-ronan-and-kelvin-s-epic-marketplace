@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Epic Marketplace — custom theme tokens                             */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --color-brand: #cc0000;
+  --color-brand-dark: #990000;
+  --color-brand-light: #ffe0e0;
+  --color-surface: #f7f7f7;
+  --color-surface-alt: #ffffff;
+  --color-border: #e0e0e0;
+  --color-text: #333333;
+  --color-text-muted: #666666;
+  --color-star: #ffc107;
+  --color-badge-best: #00833e;
+  --color-badge-top: #0066cc;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base styles                                                        */
+/* ------------------------------------------------------------------ */
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Custom utilities                                                   */
+/* ------------------------------------------------------------------ */
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Star rating shimmer */
+.star-filled { color: var(--color-star); }
+.star-empty  { color: #e0e0e0; }
+
+/* Hide scrollbar but keep scrolling */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
