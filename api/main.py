@@ -1,8 +1,8 @@
 """
 Epic Marketplace API — FastAPI wrapper for the AI search modules.
 
-Exposes Module 1 (Candidate Retrieval) as REST endpoints.
-New modules will add endpoints as they are completed.
+Exposes Module 1 (Candidate Retrieval) and Module 2 (Heuristic Re-ranking)
+as REST endpoints.  New modules will add endpoints as they are completed.
 """
 
 import logging
@@ -30,6 +30,8 @@ from src.module1 import (
     SearchResult,
     load_catalog_from_working_set,
 )
+from src.module2 import HeuristicRanker, RankedResult, ScoringConfig
+from src.module2.ranker import RANKING_STRATEGIES
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 catalog: Optional[ProductCatalog] = None
 retrieval: Optional[CandidateRetrieval] = None
+ranker: Optional[HeuristicRanker] = None
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +104,31 @@ class CategoryResponse(BaseModel):
     count: int
 
 
+class RerankItemResponse(BaseModel):
+    """Single item in a re-ranked result set."""
+
+    product: ProductResponse
+    score: float
+    rank: int
+
+
+class RerankMetadata(BaseModel):
+    """Metadata about the re-ranking pass."""
+
+    strategy: str
+    iterations: int
+    objective_value: float
+    elapsed_ms: float
+    count: int
+
+
+class RerankResponse(BaseModel):
+    """Payload returned by GET /api/rerank."""
+
+    items: List[RerankItemResponse]
+    metadata: RerankMetadata
+
+
 # ---------------------------------------------------------------------------
 # Catalog loader
 # ---------------------------------------------------------------------------
@@ -149,9 +177,10 @@ def _load_catalog() -> ProductCatalog:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global catalog, retrieval
+    global catalog, retrieval, ranker
     catalog = _load_catalog()
     retrieval = CandidateRetrieval(catalog)
+    ranker = HeuristicRanker(catalog)
     logger.info("API ready — %d products indexed", len(catalog))
     yield
 
@@ -277,5 +306,75 @@ async def search(
             page=page,
             page_size=page_size,
             total_pages=total_pages,
+        ),
+    )
+
+
+@app.get("/api/rerank", response_model=RerankResponse)
+async def rerank(
+    category: Optional[str] = Query(None, description="Category filter for candidate retrieval"),
+    price_min: Optional[float] = Query(None, ge=0),
+    price_max: Optional[float] = Query(None, ge=0),
+    min_rating: Optional[float] = Query(None, ge=0, le=5),
+    store: Optional[str] = Query(None),
+    rerank_strategy: str = Query("baseline", description="Re-ranking strategy (baseline, hill_climbing, simulated_annealing)"),
+    max_results: int = Query(20, ge=0, le=100, description="Max results to return"),
+    k: int = Query(10, ge=1, le=100, description="NDCG@k cut-off for optimiser"),
+    seed: Optional[int] = Query(None, description="RNG seed for simulated annealing"),
+):
+    """
+    Re-rank Module 1 search results using a heuristic scoring function.
+
+    Runs Module 1 candidate retrieval first, then applies a Module 2
+    re-ranking strategy (baseline, hill_climbing, or simulated_annealing).
+    """
+    if not retrieval or not catalog or not ranker:
+        raise HTTPException(503, "Catalog not loaded")
+
+    if rerank_strategy not in RANKING_STRATEGIES:
+        raise HTTPException(
+            400,
+            f"Invalid strategy '{rerank_strategy}'. "
+            f"Choose from: {list(RANKING_STRATEGIES)}",
+        )
+
+    # Step 1: Module 1 candidate retrieval
+    filters = SearchFilters(
+        price_min=price_min,
+        price_max=price_max,
+        category=category,
+        min_seller_rating=min_rating,
+        store=store,
+    )
+    search_result: SearchResult = retrieval.search(filters)
+
+    # Step 2: Module 2 heuristic re-ranking
+    ranked: RankedResult = ranker.rank(
+        search_result,
+        strategy=rerank_strategy,
+        target_category=category,
+        max_results=max_results,
+        k=k,
+        seed=seed,
+    )
+
+    # Build response items with full product data
+    items = [
+        RerankItemResponse(
+            product=ProductResponse.from_product(catalog[pid]),
+            score=round(score, 4),
+            rank=i + 1,
+        )
+        for i, (pid, score) in enumerate(ranked)
+    ]
+
+    return RerankResponse(
+        items=items,
+        metadata=RerankMetadata(
+            strategy=ranked.strategy,
+            iterations=ranked.iterations,
+            objective_value=round(ranked.objective_value, 4),
+            elapsed_ms=round(ranked.elapsed_ms, 3),
+            count=len(items),
         ),
     )
