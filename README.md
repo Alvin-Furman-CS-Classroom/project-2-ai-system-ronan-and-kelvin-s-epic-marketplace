@@ -52,15 +52,22 @@ Example: `SearchResult(candidate_ids=["B07ABC9876","B08GFTPQ5B"], strategy="line
 
 ### Module 2: Heuristic Re-ranking (Advanced Search)
 
-**Inputs:** `candidate_ids`, product features (price, rating, distance, shipping time), query features  
-Example: `features={"p12":{"rating":4.8,"distance_miles":3.2,"price":18.0}}`
+**Inputs:** `SearchResult` from Module 1 (candidate IDs), `ProductCatalog`, optional `ScoringConfig` (weight tuning), `target_category`, `strategy`  
+Example: `ranker.rank(search_result, strategy="hill_climbing", target_category="electronics", k=10)`
 
-**Outputs:** `ranked_candidates` with heuristic scores  
-Example: `ranked_candidates=[("p89",0.73),("p12",0.70)]`
+**Outputs:** `RankedResult` (frozen dataclass with `ranked_candidates` list of `(product_id, score)` tuples, `strategy`, `iterations`, `objective_value`, `elapsed_ms`)  
+Example: `RankedResult(ranked_candidates=[("p89", 0.73), ("p12", 0.70)], strategy="hill_climbing", iterations=42, objective_value=0.95, elapsed_ms=1.2)`
 
-**Dependencies:** Advanced search unit; Module 1
+**Strategies:**
+- `baseline` — Score each candidate with the weighted formula, sort descending. Zero optimiser iterations.
+- `hill_climbing` — Steepest-ascent local search that tries adjacent swaps each round to maximise NDCG@k. Stops when no swap improves or patience exceeded.
+- `simulated_annealing` — Probabilistic optimiser with geometric cooling that accepts worse swaps early (exploration) and converges later (exploitation).
 
-**Tests:** Unit tests for scoring logic; integration test with Module 1 candidate output
+**Scoring formula:** `score = w_price × invert(price) + w_rating × (rating/5) + w_pop × log_popularity + w_cat × category_match + w_rich × richness`
+
+**Dependencies:** Advanced search unit (hill climbing, simulated annealing); Module 1 (`SearchResult`, `ProductCatalog`)
+
+**Tests:** Unit tests for scoring logic (`test_scorer.py`) and ranker behaviour (`test_ranker.py`); integration test with Module 1 candidate output
 
 ### Module 3: Query Understanding (NLP)
 
@@ -162,6 +169,33 @@ result = retrieval.search(filters)
 print(f'Candidates: {result.candidate_ids}')  # ['p1', 'p2']
 print(f'Strategy: {result.strategy}, Scanned: {result.total_scanned}')
 "
+
+# Run Module 2: Heuristic Re-ranking example
+python -c "
+from src.module1 import CandidateRetrieval, SearchFilters, ProductCatalog, Product
+from src.module2 import HeuristicRanker, ScoringConfig
+
+products = [
+    Product(id='p1', title='Ceramic Mug', price=18.0, category='home', seller_rating=4.8, store='MugShop',
+            description='Handcrafted ceramic mug', rating_number=5000),
+    Product(id='p2', title='Glass Vase', price=35.0, category='home', seller_rating=4.5, store='MugShop',
+            description='Elegant glass vase for flowers', rating_number=2000, features=['hand-blown']),
+    Product(id='p3', title='Phone Case', price=15.0, category='electronics', seller_rating=4.0, store='TechCo',
+            description='Slim protective case', rating_number=8000),
+]
+catalog = ProductCatalog(products)
+retrieval = CandidateRetrieval(catalog)
+
+# Retrieve candidates
+result = retrieval.search(SearchFilters(category='home'))
+
+# Re-rank with hill climbing
+ranker = HeuristicRanker(catalog)
+ranked = ranker.rank(result, strategy='hill_climbing', target_category='home', k=5)
+print(f'Strategy: {ranked.strategy}  Iterations: {ranked.iterations}  NDCG: {ranked.objective_value:.3f}')
+for pid, score in ranked:
+    print(f'  {pid}: {score:.4f}')
+"
 ```
 
 ## Testing
@@ -176,6 +210,9 @@ pytest unit_tests/ -v
 
 # Run Module 1 tests only
 pytest unit_tests/module1/ -v
+
+# Run Module 2 tests only
+pytest unit_tests/module2/ -v
 
 # Run with coverage (optional, requires pytest-cov)
 pytest unit_tests/ -v --cov=src
