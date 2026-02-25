@@ -8,6 +8,11 @@ import {
   MonitorSmartphone,
   Zap,
   TrendingUp,
+<<<<<<< Updated upstream
+=======
+  Flame,
+  GitCompare,
+>>>>>>> Stashed changes
 } from "lucide-react";
 import { fetchCategories, fetchProducts } from "../api";
 import type { Category, Product } from "../types";
@@ -60,6 +65,15 @@ export default function HomePage() {
           </p>
 
           {/* Search bar */}
+          <p className="mt-4">
+            <Link
+              to="/compare"
+              className="inline-flex items-center gap-2 text-sm text-white/90 hover:text-white underline"
+            >
+              <GitCompare size={16} />
+              Compare Search vs Re-ranked Results
+            </Link>
+          </p>
           <form
             onSubmit={handleSearch}
             className="mx-auto mt-8 flex max-w-2xl items-center overflow-hidden rounded-full bg-white shadow-lg"

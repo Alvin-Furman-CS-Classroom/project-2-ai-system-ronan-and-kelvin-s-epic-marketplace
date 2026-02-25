@@ -3,7 +3,11 @@
 /* ------------------------------------------------------------------ */
 
 import axios from "axios";
+<<<<<<< Updated upstream
 import type { Category, Product, SearchParams, SearchResponse } from "./types";
+=======
+import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse } from "./types";
+>>>>>>> Stashed changes
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -45,3 +49,36 @@ export async function fetchProducts(limit = 20, offset = 0): Promise<Product[]> 
   });
   return data;
 }
+<<<<<<< Updated upstream
+=======
+
+/** Fetch top deals, optionally filtered by category */
+export async function fetchDeals(category?: string, limit = 20): Promise<DealsResponse> {
+  const params: Record<string, string | number> = { limit };
+  if (category) params.category = category;
+  const { data } = await api.get<DealsResponse>("/deals", { params });
+  return data;
+}
+
+/** Re-rank search results using Module 2 heuristic strategies */
+export async function fetchRerank(params: RerankParams): Promise<RerankResponse> {
+  const clean: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") {
+      clean[k] = v;
+    }
+  }
+  const { data } = await api.get<RerankResponse>("/rerank", { params: clean });
+  return data;
+}
+
+/** Fetch deal info for a single product (returns null if not a deal) */
+export async function fetchProductDeal(productId: string): Promise<DealInfo | null> {
+  try {
+    const { data } = await api.get<DealInfo>(`/products/${productId}/deal`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+>>>>>>> Stashed changes

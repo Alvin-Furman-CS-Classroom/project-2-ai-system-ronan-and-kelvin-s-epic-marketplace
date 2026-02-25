@@ -50,3 +50,62 @@ export interface SearchParams {
   page?: number;
   page_size?: number;
 }
+<<<<<<< Updated upstream
+=======
+
+export interface DealProduct {
+  product: Product;
+  deal_score: number;
+  deal_type: "hidden_gem" | "great_value";
+  price_vs_avg: number;
+  rating_vs_avg: number;
+  category_avg_price: number;
+}
+
+export interface DealsResponse {
+  deals: DealProduct[];
+  count: number;
+}
+
+export interface DealInfo {
+  deal_score: number;
+  deal_type: "hidden_gem" | "great_value";
+  price_vs_avg: number;
+  rating_vs_avg: number;
+  category_avg_price: number;
+}
+
+/** Single item in a re-ranked result */
+export interface RerankItem {
+  product: Product;
+  score: number;
+  rank: number;
+}
+
+/** Metadata about the re-ranking pass */
+export interface RerankMetadata {
+  strategy: string;
+  iterations: number;
+  objective_value: number;
+  elapsed_ms: number;
+  count: number;
+}
+
+/** Response from GET /api/rerank */
+export interface RerankResponse {
+  items: RerankItem[];
+  metadata: RerankMetadata;
+}
+
+/** Params for rerank API */
+export interface RerankParams {
+  category?: string;
+  price_min?: number;
+  price_max?: number;
+  min_rating?: number;
+  store?: string;
+  rerank_strategy?: string;
+  max_results?: number;
+  k?: number;
+}
+>>>>>>> Stashed changes
