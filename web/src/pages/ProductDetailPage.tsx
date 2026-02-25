@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Package, Store, Tag } from "lucide-react";
-import { fetchProduct } from "../api";
-import type { Product } from "../types";
+import { ArrowLeft, Package, Store, Tag, TrendingDown, TrendingUp } from "lucide-react";
+import { fetchProduct, fetchProductDeal } from "../api";
+import type { Product, DealInfo } from "../types";
 import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import Badge from "../components/Badge";
@@ -15,6 +15,7 @@ export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
+  const [dealInfo, setDealInfo] = useState<DealInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function ProductDetailPage() {
     fetchProduct(id)
       .then(setProduct)
       .catch(() => setError("Product not found"));
+    fetchProductDeal(id).then(setDealInfo);
   }, [id]);
 
   if (error) {
@@ -82,6 +84,12 @@ export default function ProductDetailPage() {
           <div className="flex flex-col gap-4">
             {/* Badges */}
             <div className="flex gap-2">
+              {dealInfo?.deal_type === "hidden_gem" && (
+                <Badge label="Deal" variant="hidden-gem" />
+              )}
+              {dealInfo?.deal_type === "great_value" && (
+                <Badge label="Deal" variant="deal" />
+              )}
               {product.seller_rating >= 4.7 && (
                 <Badge label="Top Rated" variant="top-rated" />
               )}
@@ -160,6 +168,59 @@ export default function ProductDetailPage() {
                     {tag}
                   </Link>
                 ))}
+              </div>
+            )}
+
+            {/* Deal Breakdown */}
+            {dealInfo && (
+              <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-orange-700">
+                  <TrendingDown size={16} />
+                  Deal Breakdown
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--color-text-muted)]">This product</span>
+                    <span className="font-semibold">${product.price.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--color-text-muted)]">Avg in {product.category}</span>
+                    <span className="font-semibold">${dealInfo.category_avg_price.toFixed(2)}</span>
+                  </div>
+                  <hr className="border-orange-200" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--color-text-muted)]">Price vs avg</span>
+                    <span className={`font-bold ${dealInfo.price_vs_avg < 0 ? "text-green-600" : "text-red-500"}`}>
+                      {dealInfo.price_vs_avg < 0 ? (
+                        <span className="flex items-center gap-1">
+                          <TrendingDown size={14} />
+                          {Math.abs(Math.round(dealInfo.price_vs_avg))}% cheaper
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <TrendingUp size={14} />
+                          {Math.round(dealInfo.price_vs_avg)}% more
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--color-text-muted)]">Rating vs avg</span>
+                    <span className={`font-bold ${dealInfo.rating_vs_avg > 0 ? "text-green-600" : "text-red-500"}`}>
+                      {dealInfo.rating_vs_avg > 0 ? (
+                        <span className="flex items-center gap-1">
+                          <TrendingUp size={14} />
+                          {Math.round(dealInfo.rating_vs_avg)}% higher
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <TrendingDown size={14} />
+                          {Math.abs(Math.round(dealInfo.rating_vs_avg))}% lower
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -12,6 +12,7 @@ scoring function.  Supports three strategies:
   worse moves early to escape local optima, then converges.
 """
 
+from .deals import DealFinder, DealInfo, CategoryStats
 from .exceptions import EmptyCandidatesError, InvalidWeightsError, RankingError
 from .ranker import HeuristicRanker, RankedResult
 from .scorer import ScoringConfig, compute_score, normalize
@@ -21,6 +22,10 @@ __all__ = [
     "HeuristicRanker",
     "RankedResult",
     "ScoringConfig",
+    # Deals
+    "DealFinder",
+    "DealInfo",
+    "CategoryStats",
     # Scoring helpers
     "compute_score",
     "normalize",

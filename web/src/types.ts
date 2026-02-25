@@ -50,3 +50,25 @@ export interface SearchParams {
   page?: number;
   page_size?: number;
 }
+
+export interface DealProduct {
+  product: Product;
+  deal_score: number;
+  deal_type: "hidden_gem" | "great_value";
+  price_vs_avg: number;
+  rating_vs_avg: number;
+  category_avg_price: number;
+}
+
+export interface DealsResponse {
+  deals: DealProduct[];
+  count: number;
+}
+
+export interface DealInfo {
+  deal_score: number;
+  deal_type: "hidden_gem" | "great_value";
+  price_vs_avg: number;
+  rating_vs_avg: number;
+  category_avg_price: number;
+}

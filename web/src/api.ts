@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import axios from "axios";
-import type { Category, Product, SearchParams, SearchResponse } from "./types";
+import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -44,4 +44,22 @@ export async function fetchProducts(limit = 20, offset = 0): Promise<Product[]> 
     params: { limit, offset },
   });
   return data;
+}
+
+/** Fetch top deals, optionally filtered by category */
+export async function fetchDeals(category?: string, limit = 20): Promise<DealsResponse> {
+  const params: Record<string, string | number> = { limit };
+  if (category) params.category = category;
+  const { data } = await api.get<DealsResponse>("/deals", { params });
+  return data;
+}
+
+/** Fetch deal info for a single product (returns null if not a deal) */
+export async function fetchProductDeal(productId: string): Promise<DealInfo | null> {
+  try {
+    const { data } = await api.get<DealInfo>(`/products/${productId}/deal`);
+    return data;
+  } catch {
+    return null;
+  }
 }

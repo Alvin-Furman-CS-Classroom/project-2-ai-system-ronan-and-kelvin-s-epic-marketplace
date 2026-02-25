@@ -8,9 +8,10 @@ import {
   MonitorSmartphone,
   Zap,
   TrendingUp,
+  Flame,
 } from "lucide-react";
-import { fetchCategories, fetchProducts } from "../api";
-import type { Category, Product } from "../types";
+import { fetchCategories, fetchProducts, fetchDeals } from "../api";
+import type { Category, Product, DealProduct } from "../types";
 import ProductCard from "../components/ProductCard";
 import Footer from "../components/Footer";
 
@@ -28,12 +29,14 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [trending, setTrending] = useState<Product[]>([]);
+  const [deals, setDeals] = useState<DealProduct[]>([]);
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
     fetchProducts(12, 0).then(setTrending).catch(console.error);
+    fetchDeals(undefined, 8).then((r) => setDeals(r.deals)).catch(console.error);
   }, []);
 
   function handleSearch(e: React.FormEvent) {
@@ -106,6 +109,28 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* ---- Deals ---- */}
+      {deals.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-10">
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Flame size={20} className="text-orange-500" />
+              Top Deals
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {deals.map((deal) => (
+              <ProductCard
+                key={deal.product.id}
+                product={deal.product}
+                dealType={deal.deal_type}
+                priceVsAvg={deal.price_vs_avg}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ---- Trending Products ---- */}
       <section className="mx-auto max-w-7xl px-4 pb-16">

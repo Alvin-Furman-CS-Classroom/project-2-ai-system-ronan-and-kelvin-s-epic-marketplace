@@ -1,6 +1,6 @@
 interface Props {
   label: string;
-  variant: "bestseller" | "top-rated" | "new" | "deal";
+  variant: "bestseller" | "top-rated" | "new" | "deal" | "hidden-gem";
 }
 
 const VARIANT_STYLES: Record<Props["variant"], string> = {
@@ -8,6 +8,7 @@ const VARIANT_STYLES: Record<Props["variant"], string> = {
   "top-rated": "bg-[var(--color-badge-top)] text-white",
   new: "bg-purple-600 text-white",
   deal: "bg-orange-500 text-white",
+  "hidden-gem": "bg-gradient-to-r from-amber-500 to-orange-500 text-white",
 };
 
 export default function Badge({ label, variant }: Props) {

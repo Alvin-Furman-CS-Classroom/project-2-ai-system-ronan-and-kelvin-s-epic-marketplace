@@ -30,7 +30,7 @@ from src.module1 import (
     SearchResult,
     load_catalog_from_working_set,
 )
-from src.module2 import HeuristicRanker, RankedResult, ScoringConfig
+from src.module2 import HeuristicRanker, RankedResult, ScoringConfig, DealFinder
 from src.module2.ranker import RANKING_STRATEGIES
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 catalog: Optional[ProductCatalog] = None
 retrieval: Optional[CandidateRetrieval] = None
 ranker: Optional[HeuristicRanker] = None
+deal_finder: Optional[DealFinder] = None
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +130,24 @@ class RerankResponse(BaseModel):
     metadata: RerankMetadata
 
 
+class DealProductResponse(BaseModel):
+    """A product with deal metadata."""
+
+    product: ProductResponse
+    deal_score: float
+    deal_type: str
+    price_vs_avg: float
+    rating_vs_avg: float
+    category_avg_price: float
+
+
+class DealsResponse(BaseModel):
+    """Payload returned by GET /api/deals."""
+
+    deals: List[DealProductResponse]
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # Catalog loader
 # ---------------------------------------------------------------------------
@@ -177,11 +196,13 @@ def _load_catalog() -> ProductCatalog:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global catalog, retrieval, ranker
+    global catalog, retrieval, ranker, deal_finder
     catalog = _load_catalog()
     retrieval = CandidateRetrieval(catalog)
     ranker = HeuristicRanker(catalog)
-    logger.info("API ready — %d products indexed", len(catalog))
+    deal_finder = DealFinder(catalog)
+    logger.info("API ready — %d products indexed, %d deals found",
+                len(catalog), len(deal_finder.get_deals(limit=99999)))
     yield
 
 
@@ -378,3 +399,49 @@ async def rerank(
             count=len(items),
         ),
     )
+
+
+@app.get("/api/deals", response_model=DealsResponse)
+async def get_deals(
+    category: Optional[str] = Query(None, description="Filter deals to one category"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Return top deals — products with unusually high value relative to
+    their category peers.
+    """
+    if not deal_finder or not catalog:
+        raise HTTPException(503, "Catalog not loaded")
+
+    raw = deal_finder.get_deals(category=category, limit=limit)
+    deals = [
+        DealProductResponse(
+            product=ProductResponse.from_product(catalog[pid]),
+            deal_score=info.deal_score,
+            deal_type=info.deal_type,
+            price_vs_avg=info.price_vs_avg,
+            rating_vs_avg=info.rating_vs_avg,
+            category_avg_price=info.category_avg_price,
+        )
+        for pid, info in raw
+    ]
+    return DealsResponse(deals=deals, count=len(deals))
+
+
+@app.get("/api/products/{product_id}/deal")
+async def get_product_deal(product_id: str):
+    """Return deal info for a specific product, or 404 if it's not a deal."""
+    if not deal_finder:
+        raise HTTPException(503, "Catalog not loaded")
+
+    info = deal_finder.get_deal(product_id)
+    if info is None:
+        raise HTTPException(404, "This product is not currently flagged as a deal")
+
+    return {
+        "deal_score": info.deal_score,
+        "deal_type": info.deal_type,
+        "price_vs_avg": info.price_vs_avg,
+        "rating_vs_avg": info.rating_vs_avg,
+        "category_avg_price": info.category_avg_price,
+    }

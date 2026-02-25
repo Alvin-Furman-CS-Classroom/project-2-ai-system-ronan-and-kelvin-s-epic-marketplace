@@ -5,13 +5,21 @@ import Badge from "./Badge";
 
 interface Props {
   product: Product;
+  dealType?: "hidden_gem" | "great_value" | null;
+  priceVsAvg?: number | null;
 }
 
-/** Placeholder when product has no image */
 const PLACEHOLDER =
   "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop";
 
-function getBadge(product: Product) {
+function getBadge(
+  product: Product,
+  dealType?: "hidden_gem" | "great_value" | null,
+) {
+  if (dealType === "hidden_gem")
+    return <Badge label="Deal" variant="hidden-gem" />;
+  if (dealType === "great_value")
+    return <Badge label="Deal" variant="deal" />;
   if (product.seller_rating >= 4.7)
     return <Badge label="Top Rated" variant="top-rated" />;
   if (product.rating_number && product.rating_number >= 5000)
@@ -19,8 +27,8 @@ function getBadge(product: Product) {
   return null;
 }
 
-export default function ProductCard({ product }: Props) {
-  const badge = getBadge(product);
+export default function ProductCard({ product, dealType, priceVsAvg }: Props) {
+  const badge = getBadge(product, dealType);
 
   return (
     <Link
@@ -52,6 +60,11 @@ export default function ProductCard({ product }: Props) {
           <p className="text-lg font-bold text-[var(--color-text)]">
             ${product.price.toFixed(2)}
           </p>
+          {priceVsAvg != null && priceVsAvg < 0 && (
+            <p className="text-xs font-semibold text-orange-600">
+              {Math.abs(Math.round(priceVsAvg))}% below avg
+            </p>
+          )}
           <StarRating
             rating={product.seller_rating}
             size={14}
