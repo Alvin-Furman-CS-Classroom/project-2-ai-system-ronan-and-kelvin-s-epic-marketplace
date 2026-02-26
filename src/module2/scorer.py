@@ -18,7 +18,7 @@ themselves are normalised to sum to 1 so the final score stays in [0, 1].
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Optional
 
 from src.module1.catalog import Product

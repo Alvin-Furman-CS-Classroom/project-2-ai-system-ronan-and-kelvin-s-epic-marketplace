@@ -1,14 +1,14 @@
 # Checkpoint 2 — Code Elegance Report
 
 **Module:** Module 2 — Heuristic Re-ranking (Advanced Search)  
-**Date:** February 19, 2026  
-**Reviewed files:** `src/module2/scorer.py`, `src/module2/ranker.py`, `src/module2/exceptions.py`, `src/module2/__init__.py`
+**Date:** February 26, 2026  
+**Reviewed files:** `src/module2/scorer.py`, `src/module2/ranker.py`, `src/module2/deals.py`, `src/module2/tune_sa.py`, `src/module2/exceptions.py`, `src/module2/__init__.py`
 
 ---
 
 ## Summary
 
-Module 2 maintains the same high code quality established in Module 1. The codebase is cleanly organized with scorer and ranker in separate files, each under 260 and 405 lines respectively. Feature extractors are pure functions, the optimizer algorithms follow textbook patterns, and the `RankedResult` output uses the same frozen-dataclass convention as Module 1's `SearchResult`. Naming is consistent, documentation is thorough, and the module integrates cleanly with Module 1 without modifying any existing code.
+Module 2 maintains the same high code quality established in Module 1. The codebase is cleanly organized across five source files: scorer, ranker, deals, tune_sa, and exceptions — each with a single responsibility. Feature extractors are pure functions, the optimizer algorithms follow textbook patterns, and the `RankedResult` output uses the same frozen-dataclass convention as Module 1's `SearchResult`. Named constants replace all magic numbers, naming is consistent, documentation is thorough, and the module integrates cleanly with Module 1 without modifying any existing code.
 
 ---
 
@@ -46,7 +46,7 @@ Functions are concise, focused, and each does one thing well:
 
 Abstraction is well-judged and not over-engineered:
 
-- **Clear file boundaries:** `scorer.py` handles feature extraction and scoring, `ranker.py` handles optimization and orchestration, `exceptions.py` holds error types. Each has a single domain responsibility.
+- **Clear file boundaries:** `scorer.py` handles feature extraction and scoring, `ranker.py` handles optimization and orchestration, `deals.py` handles deal detection, `tune_sa.py` handles SA hyperparameter search, `exceptions.py` holds error types. Each has a single domain responsibility.
 - **Scorer and ranker are decoupled:** The scorer computes per-product scores, the ranker uses those scores to optimize ordering. Changing the scoring formula requires no changes to the optimization algorithms.
 - **`ScoringConfig` as its own class** cleanly separates weight configuration from scoring logic. Weights can be tuned without touching feature extractors.
 - **Optimizer functions are standalone:** `_hill_climb()` and `_simulated_annealing()` take `(ordering, k)` and return `(ordering, iterations, ndcg)`. They know nothing about products — they operate on generic `(id, score)` lists. This makes them reusable.
@@ -75,7 +75,7 @@ The codebase is clean:
 
 - **No dead code** — every function, class, and method is used. No commented-out blocks.
 - **No duplication** — feature extraction logic exists in one place per feature. `ndcg_at_k()` is called by both optimizers through the same function. NDCG computation uses the shared `_dcg()` helper.
-- **Named constants:** `RANKING_STRATEGIES` defined as a tuple and used for validation. No magic numbers in optimizer defaults — all configurable via parameters.
+- **Named constants throughout:** `RANKING_STRATEGIES`, `MAX_RATING`, `MAX_DESC_LENGTH`, `MAX_FEATURE_COUNT`, `DESC_RICHNESS_WEIGHT`, `FEAT_RICHNESS_WEIGHT`, `DEFAULT_NORMALIZED_VALUE`, `DEFAULT_CATEGORY_MATCH` in scorer; `HIDDEN_GEM_PERCENTILE`, `GREAT_VALUE_PERCENTILE`, `MIN_REVIEWS_FOR_DEAL`, `MIN_PRODUCTS_PER_CATEGORY`, `QUALITY_RATING_WEIGHT`, `QUALITY_POPULARITY_WEIGHT`, `MIN_RELATIVE_PRICE` in deals; `CATEGORY_MISMATCH_PENALTY`, `STORE_MISMATCH_PENALTY`, `RATING_PENALTY_MULTIPLIER` in retrieval. No magic numbers.
 - **Optimizer defaults** (`max_iterations=500`, `patience=50`, `initial_temp=1.0`, `cooling_rate=0.995`) are documented in docstrings and exposed as parameters for tuning.
 - **No leftover imports**, no unused variables, no commented-out code blocks.
 - **Logging:** Uses `logger.warning()` for missing products (same pattern as Module 1).

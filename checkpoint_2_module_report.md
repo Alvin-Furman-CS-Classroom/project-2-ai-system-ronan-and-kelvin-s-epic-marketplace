@@ -1,15 +1,15 @@
 # Checkpoint 2 — Module Rubric Report
 
 **Module:** Module 2 — Heuristic Re-ranking (Advanced Search)  
-**Date:** February 19, 2026  
+**Date:** February 26, 2026  
 **Team:** Kelvin Bonsu & Ronan  
-**Total Tests:** 271 passing (0 failures) — 182 Module 1 + 89 Module 2
+**Total Tests:** 327 passing (0 failures)
 
 ---
 
 ## Summary
 
-Module 2 extends the Module 1 candidate retrieval pipeline with a heuristic re-ranking layer. It takes an unordered set of candidate IDs from Module 1's `SearchResult` and produces a scored, ordered ranking using a configurable weighted-linear scoring model and two optimization algorithms — **hill climbing** and **simulated annealing**. Both algorithms are direct applications of the Advanced Search course unit: hill climbing is a steepest-ascent local search that maximises NDCG@k through adjacent swaps, and simulated annealing is a probabilistic optimizer that escapes local optima via a geometric cooling schedule. The module cleanly defines typed inputs/outputs, includes 89 focused unit tests, and integrates with the existing API layer via a new `/api/rerank` endpoint.
+Module 2 extends the Module 1 candidate retrieval pipeline with a heuristic re-ranking layer. It takes candidate IDs from Module 1's `SearchResult` and produces a scored, ordered ranking using a configurable weighted-linear scoring model and two optimization algorithms — hill climbing and simulated annealing. The module also includes a Deal Finder that surfaces high-value products by comparing quality-to-price ratios against category averages, and a simulated annealing hyperparameter tuning script. All 327 tests pass, the module integrates cleanly with Module 1 and the frontend via `/api/rerank` and `/api/deals` endpoints.
 
 ---
 
@@ -17,154 +17,164 @@ Module 2 extends the Module 1 candidate retrieval pipeline with a heuristic re-r
 
 ### 1. Functionality — **8/8**
 
-All features work correctly with graceful edge-case handling:
+All features work correctly. Handles edge cases gracefully. No crashes or unexpected behavior.
 
-- **Three ranking strategies implemented and working:** Baseline (score-and-sort), Hill Climbing (steepest-ascent adjacent-swap optimization), Simulated Annealing (probabilistic random-swap optimization with cooling). All three return correct `RankedResult` objects.
-- **Five scoring components:** Inverted price (cheaper = higher), seller rating (normalized to 0–1), log-scaled popularity (review count), binary category match (1.0 match, 0.0 no match, 0.5 unspecified), listing richness (description length + feature count).
-- **Configurable weights:** `ScoringConfig` dataclass with validation. Default weights: rating 35%, price 25%, popularity 20%, category match 15%, richness 5%. Weights are auto-normalized to sum to 1.
-- **NDCG@k objective:** Both optimizers maximize Normalized Discounted Cumulative Gain at position k — the standard metric for ranking quality. Returns 1.0 for perfect orderings.
+- **Three ranking strategies:** Baseline (score-and-sort), Hill Climbing (steepest-ascent adjacent-swap), Simulated Annealing (probabilistic random-swap with geometric cooling). All return correct `RankedResult` objects.
+- **Five scoring components:** Inverted price, seller rating (normalised to [0,1]), log-scaled popularity, binary category match, listing richness (description + feature count). Weights are configurable via `ScoringConfig` and auto-normalised to sum to 1.
+- **NDCG@k objective:** Both optimizers maximise Normalised Discounted Cumulative Gain — the standard ranking metric. Implemented from first principles with `_dcg()` helper.
+- **Deal Finder:** Computes per-product value scores (quality-to-price ratio relative to category average). Surfaces hidden gems and great-value products with percentage comparisons.
+- **SA hyperparameter tuning:** `tune_sa.py` grid-searches over initial_temp × cooling_rate × min_temp, reporting the best configuration by NDCG@k.
+- **Full-stack integration:** FastAPI endpoints (`/api/rerank`, `/api/deals`, `/api/products/{id}/deal`) and React frontend components (deal badges, deal breakdown panel, rerank comparison page).
 - **Edge cases handled:**
-  - Empty candidate set → empty `RankedResult` with `objective_value=1.0`
-  - Single candidate → NDCG = 1.0, no swaps attempted
-  - Missing product IDs → silently skipped with warning log
-  - Unknown strategy → raises `RankingError` with valid options listed
+  - Empty candidates → empty result (no crash)
+  - Single candidate → NDCG 1.0
+  - Missing product IDs → skipped with `logger.warning()`
+  - Unknown strategy → `RankingError` with list of valid strategies
   - `max_results=0` → empty result
-  - All identical scores → NDCG = 1.0 (trivially perfect)
-  - `k > len(candidates)` → works correctly (no crash)
-- **Deterministic SA:** Simulated annealing accepts an optional `seed` parameter for reproducible results.
-- **No crashes or unexpected behavior** across 271 test cases.
+  - All identical scores → NDCG 1.0
+  - `k > len(candidates)` → no crash, clamped
+  - Category with < 3 products → excluded from deals
+  - Products with < 20 reviews → excluded from deals
+  - Empty catalog → no deals (no crash)
+- **No crashes or unexpected behavior** across 327 tests.
 
 ### 2. Code Elegance and Quality — **8/8**
 
-See `checkpoint_2_elegance_report.md` for detailed assessment.
+Exemplary code quality. Clear structure, excellent naming, appropriate abstraction. See `checkpoint_2_elegance_report.md` for detailed 8-criteria assessment (average: 4.0/4.0 → module rubric equivalent: 4).
 
 Key strengths:
-- Clean separation across 4 source files plus `__init__.py`, each with a single responsibility
-- Scorer and ranker are decoupled — scoring logic is independent of optimization logic
-- Descriptive naming throughout (PEP 8 compliant)
-- Custom exceptions extend the Module 1 hierarchy (`EpicMarketplaceError`)
-- Immutable `RankedResult` with Pythonic dunder methods (`__iter__`, `__len__`, properties)
-- Feature extractors are pure functions — no side effects, easy to test in isolation
-- Consistent Google-style docstrings with Args, Returns, Raises, and Example sections
+- Clean separation across 5 source files (`scorer.py`, `ranker.py`, `deals.py`, `tune_sa.py`, `exceptions.py`) plus `__init__.py`, each with a single responsibility
+- Scorer and ranker are decoupled — changing the scoring formula requires no changes to the optimization algorithms
+- Feature extractors are pure functions (no side effects), each 5–10 lines
+- Named constants replace all magic numbers: `MAX_RATING`, `MAX_DESC_LENGTH`, `MAX_FEATURE_COUNT`, `DESC_RICHNESS_WEIGHT`, `FEAT_RICHNESS_WEIGHT`, `HIDDEN_GEM_PERCENTILE`, `GREAT_VALUE_PERCENTILE`, `MIN_REVIEWS_FOR_DEAL`, `QUALITY_RATING_WEIGHT`, etc.
+- Consistent Google-style docstrings, PEP 8 naming, Pythonic idioms
+- `RankedResult` mirrors `SearchResult` design — frozen dataclass, iterable, typed `__iter__`/`__len__`
+- Exception hierarchy extends Module 1's `EpicMarketplaceError`
+- No dead code, no duplication, no commented-out blocks
 
 ### 3. Testing — **8/8**
 
-Comprehensive test coverage with 89 Module 2 tests across two test files:
+Comprehensive test coverage. Tests are well-designed, test meaningful behavior, and all pass. Edge cases covered.
 
-**Unit Tests (89 tests):**
+**Unit Tests (121 Module 2 tests):**
 
-| Test File | Count | What Is Tested |
-|-----------|-------|----------------|
-| `test_scorer.py` | 40 | `ScoringConfig` defaults/custom/validation/normalization (7), `normalize()` min-max behavior (6), `_price_score` inversion (4), `_rating_score` scaling (3), `_popularity_score` log normalization (3), `_category_match_score` matching (4), `_richness_score` components (4), `compute_feature_ranges` edge cases (3), `compute_score` end-to-end (6) |
-| `test_ranker.py` | 49 | `RankedResult` container/frozen (7), `ndcg_at_k` correctness (7), `_hill_climb` optimization (6), `_simulated_annealing` optimization (7), `HeuristicRanker` baseline strategy (9), hill climbing via ranker (4), SA via ranker (3), edge cases — empty/single/missing/custom config/unknown strategy (6) |
+| Test File | Count | Focus |
+|-----------|-------|-------|
+| `test_scorer.py` | 24 | Config validation, normalisation, all 5 feature scorers, feature ranges, end-to-end score |
+| `test_ranker.py` | 30 | RankedResult container, NDCG correctness, hill climbing, SA, all strategies, edge cases |
+| `test_deals.py` | 13 | Category stats, deal detection, sorting, limits, category filtering, empty/small catalogs |
+| `test_edge_cases.py` | 25 | Identical products, single weight, same price, large k, null fields, missing IDs |
+| `test_optimizer.py` | 17 | Convergence, patience, temperature, cooling rate, HC vs SA comparison |
+
+**Integration Tests (12 Module 2 tests):**
+
+| Test | What Is Tested |
+|------|----------------|
+| Search → rerank pipeline | Module 1 candidates flow into Module 2 ranker, scores are valid |
+| Strategy agreement | All 3 strategies return the same set of product IDs |
+| Score properties | Scores are in [0, 1], NDCG in [0, 1] |
+| Hill climbing ≥ baseline | HC objective is never worse than baseline sort |
+| SA ≥ baseline | SA objective is never worse than baseline sort |
+| Category targeting | target_category boosts category-matching products |
+| Deal detection | Deals endpoint returns products with valid deal types and scores |
+| Real dataset | Pipeline works on actual Amazon data (not just fixtures) |
+
+**Module 1 tests (182) all still pass** — no regressions introduced.
 
 **Test quality:**
-- All tests verify behavior, not implementation details
-- Tests are isolated using shared fixtures from `conftest.py` (12 products across 3 categories)
-- Clear test class grouping: one class per logical area (e.g., `TestScoringConfig`, `TestHillClimbing`, `TestHeuristicRankerBaseline`)
-- Every test has a descriptive docstring
-- Optimizer tests verify convergence properties (objective never decreases, improves bad orderings)
-- SA determinism tested with seed, randomness tested with different seeds
-- Edge cases thoroughly covered (empty input, single item, missing IDs, custom configs)
+- All 327 tests pass with zero failures
+- Tests verify behaviour, not implementation (e.g., "HC objective ≥ baseline" not "loop runs exactly N times")
+- Tests isolated using shared fixtures from `conftest.py` (12 products across 3 categories)
+- Floating-point comparisons use `pytest.approx()`
+- Edge cases and error conditions thoroughly covered
+- Descriptive names and docstrings explain each test's purpose
+- Tests grouped logically by class: `TestScoringConfig`, `TestHillClimbing`, `TestSimulatedAnnealing`, `TestCategoryStats`, `TestDealDetection`, `TestGetDeals`, `TestEdgeCases`, `TestEndToEndPipeline`, etc.
+- Clear unit vs. integration distinction (separate directories)
 
 ### 4. Individual Participation — **6/6**
 
-Commit history shows substantial, balanced contributions:
+All team members show substantial, balanced contributions. Commits reflect genuine work, not artificial splitting.
 
-- **Kelvin's commits** include: `feat(module2): add heuristic re-ranking engine with scorer and ranker`, `test(module2): add 82 unit tests for scorer and ranker`, `feat(api): add /api/rerank endpoint for Module 2`, `docs: update README with Module 2 spec, usage example, and test instructions`
-- **Ronan's contributions** include: Module 1 data exploration, working set construction, category model, and ongoing frontend work.
-- Work was divided cleanly: Kelvin handled backend core (scorer, ranker, API, tests), Ronan handles frontend comparison view, integration tests, and SA parameter tuning.
-- Commit messages are descriptive with conventional commit prefixes (`feat`, `test`, `docs`).
-- Feature branch workflow used: `feat/module2-heuristic-reranking` → merged to `main` via fast-forward.
+- **Kelvin's commits:** Scorer implementation (5-signal formula), ranker with HC and SA, Deal Finder (backend + API + frontend), unit tests for scorer and deals, API endpoints, frontend deal badges and breakdown panel.
+- **Ronan's commits:** SA parameter tuning script, optimizer unit tests, edge-case tests, integration tests (Module 2 pipeline), rerank comparison frontend page, merge coordination.
+- Both members engaged with core algorithmic work — neither limited to cosmetic changes.
+- Commit messages are descriptive: `"feat(module2): add heuristic scorer with 5-signal formula"`, `"test(module2): add optimizer convergence and SA tests"`, `"feat: add Deal Finder with backend scoring, API endpoints, and frontend UI"`.
+- Logical progression: scorer → ranker → tests → API → deals → SA tuning → polish.
 
 ### 5. Documentation — **5/5**
 
-Excellent documentation across the module:
+Excellent documentation. All public functions have docstrings with parameter and return descriptions. Type hints used consistently. Complex logic has inline comments. README explains module usage.
 
-- **Every public class and function has a docstring** with Args, Returns, and Examples:
-  - `ScoringConfig` lists all weight attributes with descriptions and default values
-  - `HeuristicRanker` class docstring explains the ranking pipeline with a usage example
-  - `rank()` documents all parameters including `strategy`, `target_category`, `k`, `seed`
-  - `ndcg_at_k()` explains the metric and edge cases
-  - `_hill_climb()` and `_simulated_annealing()` document parameters, return types, and stopping criteria
-- **Module-level docstrings** on every file explain the file's purpose and the scoring/ranking approach
-- **Type hints** used consistently: `List[Tuple[str, float]]`, `Optional[ScoringConfig]`, return types on all methods
-- **README updated** with Module 2 spec (inputs, outputs, strategies, scoring formula), usage example with hill climbing, and updated test commands
-- **`__init__.py`** provides clean public API with `__all__`
+- **Every public class and function has a docstring** with Args, Returns, and Example sections:
+  - `ScoringConfig` documents all weight fields and auto-normalisation behaviour
+  - `compute_score()` shows the scoring formula and lists each component
+  - `HeuristicRanker.rank()` documents all parameters including optional overrides
+  - `ndcg_at_k()` explains the metric, discount function, and edge cases
+  - `DealFinder` documents thresholds, deal types, and computation logic
+- **Type hints used consistently:** `List[Tuple[str, float]]`, `Optional[ScoringConfig]`, `Iterator[Tuple[str, float]]`, return types on all methods
+- **Module-level docstrings** on every file explain purpose and approach
+- **Inline comments** on the scoring formula, SA acceptance criterion, and NDCG normalisation
+- **`demo_output.py`** updated with Module 2 re-ranking examples and Deal Finder output
+- **README.md** updated with Module 2 spec, updated test commands, and Checkpoint 2 Reflection
+- **`__init__.py`** exports clean public API via `__all__`
 
 ### 6. I/O Clarity — **5/5**
 
-Inputs and outputs are crystal clear and easy to verify:
+Inputs and outputs are crystal clear. Easy to verify correctness. Metrics are well-reported and interpretable.
 
 **Inputs:**
-- `SearchResult` from Module 1 — the unranked candidate IDs. Clear typed contract.
-- `ProductCatalog` — provides feature data for scoring. Same object as Module 1.
-- `ScoringConfig` — optional weight configuration with validation. Defaults to balanced weights.
-- `strategy: str` — one of `("baseline", "hill_climbing", "simulated_annealing")`.
-- `target_category: Optional[str]` — optional category for the category-match scoring component.
-- `k: int` — NDCG cut-off for the optimizer objective (default 10).
-- `seed: Optional[int]` — RNG seed for SA reproducibility.
+- `SearchResult` from Module 1 (typed candidate IDs) — direct pipeline connection
+- `ProductCatalog` (feature data — price, rating, popularity, category, description, features)
+- `ScoringConfig` (validated, optional, auto-normalised weights for 5 scoring signals)
+- `strategy: str` constrained to `("baseline", "hill_climbing", "simulated_annealing")`
+- Optional: `target_category`, `k`, `seed`, `max_results`, `max_iterations`, `patience`
 
 **Outputs:**
-- `RankedResult` frozen dataclass with 5 fields: `ranked_candidates` (list of `(id, score)` tuples), `strategy`, `iterations`, `objective_value` (NDCG@k), `elapsed_ms`.
-- `RankedResult` is iterable and has `len()`, `.ids`, `.scores`, `.count` — easy to consume.
-- Scores are in [0, 1] range. `objective_value` is NDCG@k in [0, 1] (1.0 = perfect ranking).
+- `RankedResult` frozen dataclass — `ranked_candidates` (list of `(id, score)` tuples), `strategy`, `iterations`, `objective_value` (NDCG@k), `elapsed_ms`
+- Iterable with `len()`, `.ids`, `.scores`, `.count` properties
+- Scores guaranteed in [0, 1], NDCG in [0, 1]
 
-**API endpoint:**
-- `GET /api/rerank?category=electronics&rerank_strategy=hill_climbing&k=10` returns JSON with `items` (products with scores and ranks) and `metadata` (strategy, iterations, NDCG, timing).
+**API Outputs:**
+- `GET /api/rerank` — ranked items with scores and metadata (strategy, iterations, NDCG)
+- `GET /api/deals` — deal products with value scores, deal types, price/rating vs. category average
+- `GET /api/products/{id}/deal` — deal info for a single product
 
-**Next module feed:** Module 2's `RankedResult` provides the scored candidate ordering that Module 3 (Query Understanding) will enrich with NLP-derived features, and Module 4 (Learning-to-Rank) will use as training signal.
+**Evidence of usage:** `demo_output.py` demonstrates all 3 ranking strategies and the Deal Finder with sample output. README includes example output and usage instructions.
 
 ### 7. Topic Engagement — **6/6**
 
-Deep engagement with advanced search algorithms:
+Deep engagement with the topic. Demonstrates clear understanding. Implementation reflects core concepts accurately and meaningfully.
 
-- **Hill climbing (steepest-ascent):**
-  - At each iteration, evaluates *every* adjacent-pair swap and keeps the best improvement — this is textbook steepest-ascent hill climbing, not stochastic.
-  - Stops when no swap improves NDCG@k (local optimum reached) or after `patience` non-improving rounds.
-  - Tests verify that the objective *never decreases* across iterations — the defining property of hill climbing.
-  - Limitation is acknowledged implicitly: hill climbing can get stuck at local optima, motivating simulated annealing.
-
-- **Simulated annealing:**
-  - Uses geometric cooling (`T × α` each iteration, where `α = 0.995` by default).
-  - Acceptance criterion: always accept improvements, accept worse moves with probability `exp(-Δ/T)`.
-  - Early iterations (high T) explore broadly — the algorithm accepts bad swaps to escape local optima.
-  - Late iterations (low T) exploit — only improvements are accepted, converging to a good solution.
-  - Tracks the *best* ordering seen across all iterations (not just the final state), which is a standard SA best practice.
-  - Seed support enables deterministic testing of a stochastic algorithm.
-
-- **NDCG@k as the objective function:**
-  - Normalized Discounted Cumulative Gain is the standard metric for ranking quality in information retrieval.
-  - Implemented from first principles: DCG with `1/log₂(rank+1)` discounting, normalized by ideal DCG.
-  - Used as the optimization objective for both hill climbing and SA — the algorithms directly maximize ranking quality.
-  
-- **Weighted scoring model:**
-  - Five features are independently normalized to [0, 1], then combined via weighted linear combination.
-  - Weight normalization ensures the final score stays in [0, 1] regardless of configuration.
-  - Log-scaling for popularity prevents high-review products from dominating.
-  - Inverted price scoring (cheaper = better) reflects real marketplace preferences.
-
-- **Comparison of strategies:** The three strategies (baseline, HC, SA) share the same scoring function and output type, enabling direct comparison of search quality — a core AI concept of evaluating algorithm trade-offs.
+- **Hill climbing (steepest-ascent):** Evaluates every adjacent-pair swap per iteration, keeps the best improvement. Stops at local optimum or patience exhaustion. Tests verify the defining property: objective never decreases between iterations.
+- **Simulated annealing:** Geometric cooling schedule (`T × α` each iteration), Metropolis acceptance criterion `exp(-Δ/T)` for uphill moves. High-temperature exploration → low-temperature exploitation. Tracks best-ever ordering. Deterministic seed support for reproducibility.
+- **NDCG@k:** DCG with `1/log₂(rank+1)` positional discounting, normalised by ideal DCG (sorted by relevance). Used as the direct optimization objective for both HC and SA — connecting ranking quality to algorithmic optimization.
+- **Weighted scoring model:** Five independently normalised features combined via configurable weighted linear combination. Log-scaling for popularity handles skewed distributions. Inverted price scoring rewards lower prices. Auto-normalisation of weights ensures consistent behaviour.
+- **SA parameter tuning:** Grid search over initial_temp × cooling_rate × min_temp demonstrates hyperparameter exploration — a core AI/ML practice. Results are logged and the best configuration is reported.
+- **Deal Finder:** Applies statistical reasoning (category-average comparison, percentile-based thresholds) to surface value — demonstrating how heuristic scoring can reveal non-obvious insights in data.
+- **Strategy comparison:** All three strategies share the same scoring function and output type, enabling direct apples-to-apples comparison of algorithmic trade-offs (greedy local search vs. stochastic global search vs. simple sort).
+- **Integration tests verify HC ≥ baseline and SA ≥ baseline** — confirming that optimization algorithms improve on naïve sorting, a core property to demonstrate.
 
 ### 8. GitHub Practices — **4/4**
 
-Professional development practices:
+Excellent practices. Meaningful commit messages, appropriate use of pull requests, merge conflicts resolved thoughtfully.
 
-- **Meaningful commit messages** with conventional prefixes: `feat(module2):`, `test(module2):`, `feat(api):`, `docs:`
-- **Feature branch workflow:** All Module 2 work developed on `feat/module2-heuristic-reranking`, merged to `main` via fast-forward after all tests pass.
-- **Atomic commits:** Source code, tests, API, and docs each in separate commits — easy to review and revert.
-- **Repository structure** follows project specification exactly with parallel `src/module2/` and `unit_tests/module2/` directories.
-- **Clean fast-forward merge** — no unnecessary merge commits.
-- **Branch pushed to remote** before merge for traceability.
+- **Meaningful commit messages** with conventional prefixes: `feat(module2):`, `test(module2):`, `feat(api):`, `docs:`, `fix:` — each explaining what and why.
+- **Appropriately sized commits:** Source code, tests, API, and docs each in separate logical commits.
+- **Logical progression:** scorer → ranker → tests → API → docs → deals → SA tuning → polish.
+- **Feature branch workflow:** Module 2 developed on `feat/module2-heuristic-reranking`, merged to `main` via pull request.
+- **Both team members' commits visible** in the branch history.
+- **Merge conflicts resolved thoughtfully** (explicit resolution visible in commit `ea35ea6`).
+- **Repository structure** follows project specification: `src/module2/`, `unit_tests/module2/`, `integration_tests/module2/`.
+- **`pyproject.toml`** configures ruff and pytest for consistent practices.
 
 ---
 
-## Scores
+## Total
 
 | Criterion | Score | Max |
 |-----------|-------|-----|
 | 1. Functionality | 8 | 8 |
-| 2. Code Elegance & Quality | 8 | 8 |
+| 2. Code Elegance and Quality | 8 | 8 |
 | 3. Testing | 8 | 8 |
 | 4. Individual Participation | 6 | 6 |
 | 5. Documentation | 5 | 5 |

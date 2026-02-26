@@ -20,12 +20,12 @@ import logging
 import math
 import random
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from src.module1.catalog import Product, ProductCatalog
 from src.module1.retrieval import SearchResult
-from src.module2.exceptions import EmptyCandidatesError, RankingError
+from src.module2.exceptions import RankingError
 from src.module2.scorer import ScoringConfig, compute_feature_ranges, compute_score
 
 logger = logging.getLogger(__name__)
