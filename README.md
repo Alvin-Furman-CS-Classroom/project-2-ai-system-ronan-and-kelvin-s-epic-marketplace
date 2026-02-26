@@ -225,7 +225,7 @@ pytest unit_tests/ -v --cov=src
 | Checkpoint | Date | Modules Included | Status | Evidence |
 | ---------- | ---- | ---------------- | ------ | -------- |
 | 1 | Feb 11 | Module 1 | Complete | 182 tests (unit + integration), 4 search strategies over category tree, typed `SearchResult`, custom exceptions, structured logging, category index, BFS/DFS pruning — see [Evidence of Usage](#evidence-of-usage) |
-| 2 | Feb 26 | Modules 1-2 | In Progress | 89 Module 2 tests (40 scorer + 49 ranker), 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring with 5 features, NDCG@k objective, `/api/rerank` endpoint, 271 total tests passing |
+| 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
 | 3 | Mar 19 | Modules 1-3 |  |  |
 | 4 | Apr 2 | Modules 1-4 |  |  |
 

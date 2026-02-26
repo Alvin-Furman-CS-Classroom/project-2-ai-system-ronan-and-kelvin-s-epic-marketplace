@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import axios from "axios";
-import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo } from "./types";
+import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -51,6 +51,18 @@ export async function fetchDeals(category?: string, limit = 20): Promise<DealsRe
   const params: Record<string, string | number> = { limit };
   if (category) params.category = category;
   const { data } = await api.get<DealsResponse>("/deals", { params });
+  return data;
+}
+
+/** Re-rank search results using Module 2 heuristic strategies */
+export async function fetchRerank(params: RerankParams): Promise<RerankResponse> {
+  const clean: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") {
+      clean[k] = v;
+    }
+  }
+  const { data } = await api.get<RerankResponse>("/rerank", { params: clean });
   return data;
 }
 
