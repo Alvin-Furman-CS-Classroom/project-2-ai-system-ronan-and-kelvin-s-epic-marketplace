@@ -24,6 +24,14 @@ from typing import Dict, Optional
 from src.module1.catalog import Product
 from src.module2.exceptions import InvalidWeightsError
 
+MAX_RATING = 5.0
+MAX_DESC_LENGTH = 500.0
+MAX_FEATURE_COUNT = 10.0
+DESC_RICHNESS_WEIGHT = 0.6
+FEAT_RICHNESS_WEIGHT = 0.4
+DEFAULT_NORMALIZED_VALUE = 0.5
+DEFAULT_CATEGORY_MATCH = 0.5
+
 
 # ---------------------------------------------------------------------------
 # Scoring configuration
@@ -105,7 +113,7 @@ def normalize(value: float, lo: float, hi: float) -> float:
         (all values identical).
     """
     if hi == lo:
-        return 0.5
+        return DEFAULT_NORMALIZED_VALUE
     return max(0.0, min(1.0, (value - lo) / (hi - lo)))
 
 
@@ -135,7 +143,7 @@ def _rating_score(product: Product) -> float:
     Returns:
         ``seller_rating / 5.0``, clamped to [0, 1].
     """
-    return min(1.0, max(0.0, product.seller_rating / 5.0))
+    return min(1.0, max(0.0, product.seller_rating / MAX_RATING))
 
 
 def _popularity_score(
@@ -167,7 +175,7 @@ def _category_match_score(product: Product, target_category: Optional[str]) -> f
         Returns 0.5 if no target category is specified.
     """
     if target_category is None:
-        return 0.5
+        return DEFAULT_CATEGORY_MATCH
     return 1.0 if product.category.lower() == target_category.lower() else 0.0
 
 
@@ -183,12 +191,12 @@ def _richness_score(product: Product) -> float:
         Float in [0, 1].
     """
     desc_len = len(product.description or "")
-    desc_component = min(desc_len / 500.0, 1.0)
+    desc_component = min(desc_len / MAX_DESC_LENGTH, 1.0)
 
     feature_count = len(product.features or [])
-    feat_component = min(feature_count / 10.0, 1.0)
+    feat_component = min(feature_count / MAX_FEATURE_COUNT, 1.0)
 
-    return 0.6 * desc_component + 0.4 * feat_component
+    return DESC_RICHNESS_WEIGHT * desc_component + FEAT_RICHNESS_WEIGHT * feat_component
 
 
 # ---------------------------------------------------------------------------

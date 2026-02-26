@@ -21,7 +21,7 @@ import math
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from src.module1.catalog import Product, ProductCatalog
 from src.module1.retrieval import SearchResult
@@ -75,11 +75,12 @@ class RankedResult:
         """Number of ranked candidates."""
         return len(self.ranked_candidates)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Tuple[str, float]]:
         """Iterate over ``(product_id, score)`` tuples."""
         return iter(self.ranked_candidates)
 
     def __len__(self) -> int:
+        """Return the number of ranked candidates."""
         return len(self.ranked_candidates)
 
     @property

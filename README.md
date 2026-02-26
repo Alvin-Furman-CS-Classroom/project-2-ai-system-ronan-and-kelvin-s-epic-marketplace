@@ -275,18 +275,60 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-182 passed in 2.64s
+327 passed in 4.45s
 ```
 
 | Suite | Location | Count | Focus |
 | ----- | -------- | ----- | ----- |
-| Catalog | `unit_tests/module1/test_catalog.py` | 14 | CRUD, validation, category index |
-| Filters | `unit_tests/module1/test_filters.py` | 23 | Range, defaults, from_dict, errors |
-| Retrieval | `unit_tests/module1/test_retrieval.py` | 55 | Strategies, sorting, edge filters, heuristic |
-| Edge Cases | `unit_tests/module1/test_edge_cases.py` | 35 | Boundaries, empty catalogs, exception hierarchy, search-tree structure, BFS/DFS pruning |
-| Loader | `unit_tests/module1/test_loader.py` | 10 | Seller ratings, load catalog, max_products |
+| Catalog | `unit_tests/module1/test_catalog.py` | 44 | CRUD, validation, from_amazon_meta, category index |
+| Filters | `unit_tests/module1/test_filters.py` | 18 | Range, defaults, from_dict, store, sort_by |
+| Retrieval | `unit_tests/module1/test_retrieval.py` | 86 | Strategies, sorting, store filter, heuristic |
+| Module 1 Edge Cases | `unit_tests/module1/test_edge_cases.py` | 22 | Boundaries, empty catalogs, exception hierarchy, search-tree, BFS/DFS pruning |
 | Working Set | `unit_tests/data/test_working_set_builder.py` | 4 | Category classification, data pipeline |
-| Integration | `integration_tests/module1/test_module1_integration.py` | 9 | End-to-end pipeline, recall vs brute-force |
+| Scorer | `unit_tests/module2/test_scorer.py` | 24 | Price, rating, popularity, category match, richness scoring |
+| Ranker | `unit_tests/module2/test_ranker.py` | 30 | Baseline, hill climbing, SA, NDCG, truncation |
+| Deals | `unit_tests/module2/test_deals.py` | 13 | Category stats, deal detection, limits, edge cases |
+| Module 2 Edge Cases | `unit_tests/module2/test_edge_cases.py` | 25 | Identical products, single weight, large k, null fields |
+| Module 2 Optimizer | `unit_tests/module2/test_optimizer.py` | 17 | Convergence, temperature, cooling rate, HC vs SA |
+| Integration Module 1 | `integration_tests/module1/test_module1_integration.py` | 9 | End-to-end pipeline, recall vs brute-force |
+| Integration Module 2 | `integration_tests/module2/test_module2_integration.py` | 12 | Search→rerank pipeline, strategy agreement, NDCG, category targeting |
+
+## Checkpoint 2 Reflection
+
+Checkpoint 2 delivers Module 2 — Heuristic Re-ranking — which takes the flat
+candidate list from Module 1 and scores every product using a configurable
+weighted formula, then optimises the ordering with hill climbing or simulated
+annealing.
+
+**What changed from the initial plan:**
+
+1. **Five-signal scoring formula** — The original plan had three signals (price,
+   rating, popularity). We added *category match* and *listing richness* (description
+   length + feature count) to capture more facets of product quality. Each signal is
+   normalised to [0, 1] so the configurable weights stay interpretable.
+
+2. **NDCG@k as the optimisation objective** — Instead of the originally planned
+   Precision@k, we use Normalised Discounted Cumulative Gain, which rewards
+   placing the best items at the very top. This made the hill-climbing and SA
+   optimisers more sensitive to rank positions.
+
+3. **Simulated annealing hyper-parameter tuning** — `tune_sa.py` grid-searches over
+   initial temperature, cooling rate, and minimum temperature, reporting the best
+   combo by NDCG@k. This was not in the original plan but gives concrete evidence
+   of parameter exploration.
+
+4. **Deal Finder** — An additional feature that compares each product's quality-to-
+   price ratio against its category average and surfaces "hidden gem" deals. This
+   reuses the scoring infrastructure from Module 2 and feeds directly into the
+   frontend.
+
+5. **Full-stack integration** — The FastAPI backend exposes `/api/rerank` and
+   `/api/deals` endpoints, and the React frontend now has a re-rank comparison
+   page (`/compare`) and a "Top Deals" section on the homepage.
+
+6. **Test expansion** — 327 tests (up from 182 at Checkpoint 1) now cover scorer
+   logic, ranker strategies, optimiser behaviour, edge cases, deals, and Module 2
+   integration with Module 1 candidates.
 
 ## Checkpoint 1 Reflection
 

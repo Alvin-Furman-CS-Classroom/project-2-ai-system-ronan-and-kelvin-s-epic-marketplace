@@ -21,6 +21,11 @@ from src.module1.catalog import Product, ProductCatalog
 HIDDEN_GEM_PERCENTILE = 0.05
 GREAT_VALUE_PERCENTILE = 0.15
 MIN_REVIEWS_FOR_DEAL = 20
+MIN_PRODUCTS_PER_CATEGORY = 3
+MAX_RATING = 5.0
+QUALITY_RATING_WEIGHT = 0.6
+QUALITY_POPULARITY_WEIGHT = 0.4
+MIN_RELATIVE_PRICE = 0.01
 
 
 @dataclass(frozen=True)
@@ -103,7 +108,7 @@ class DealFinder:
             by_cat.setdefault(key, []).append(product)
 
         for cat_key, products in by_cat.items():
-            if len(products) < 3:
+            if len(products) < MIN_PRODUCTS_PER_CATEGORY:
                 continue
 
             avg_price = sum(p.price for p in products) / len(products)
@@ -125,11 +130,11 @@ class DealFinder:
                     continue
 
                 quality = (
-                    0.6 * (p.seller_rating / 5.0)
-                    + 0.4 * self._popularity_percentile(p, products)
+                    QUALITY_RATING_WEIGHT * (p.seller_rating / MAX_RATING)
+                    + QUALITY_POPULARITY_WEIGHT * self._popularity_percentile(p, products)
                 )
                 relative_price = p.price / avg_price if avg_price > 0 else 1.0
-                deal_score = quality / max(relative_price, 0.01)
+                deal_score = quality / max(relative_price, MIN_RELATIVE_PRICE)
                 scores.append((p.id, deal_score))
 
             if not scores:

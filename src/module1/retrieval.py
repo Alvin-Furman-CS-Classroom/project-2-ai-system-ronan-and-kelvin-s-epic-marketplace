@@ -35,7 +35,7 @@ import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterator, List, Optional, Set
 import heapq
 
 from .exceptions import UnknownSearchStrategyError
@@ -43,6 +43,11 @@ from .filters import SearchFilters
 from .catalog import ProductCatalog, Product
 
 logger = logging.getLogger(__name__)
+
+# Priority-search penalty constants (A*-style heuristic)
+CATEGORY_MISMATCH_PENALTY = 100.0
+STORE_MISMATCH_PENALTY = 75.0
+RATING_PENALTY_MULTIPLIER = 10.0
 
 
 @dataclass(frozen=True)
@@ -66,11 +71,12 @@ class SearchResult:
         """Number of candidates returned."""
         return len(self.candidate_ids)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         """Allow unpacking / iteration over candidate IDs."""
         return iter(self.candidate_ids)
 
     def __len__(self) -> int:
+        """Return the number of candidates."""
         return len(self.candidate_ids)
 
 
@@ -515,15 +521,15 @@ class CandidateRetrieval:
 
         if filters.category is not None:
             if product.category.lower() != filters.category.lower():
-                priority += 100  # Large penalty for wrong category
+                priority += CATEGORY_MISMATCH_PENALTY
 
         if filters.min_seller_rating is not None:
             if product.seller_rating < filters.min_seller_rating:
-                priority += (filters.min_seller_rating - product.seller_rating) * 10
+                priority += (filters.min_seller_rating - product.seller_rating) * RATING_PENALTY_MULTIPLIER
 
         if filters.store is not None:
             if product.store.lower() != filters.store.lower():
-                priority += 75  # Significant penalty for wrong store
+                priority += STORE_MISMATCH_PENALTY
 
         return priority
 
