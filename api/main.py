@@ -5,10 +5,12 @@ Exposes Module 1 (Candidate Retrieval) and Module 2 (Heuristic Re-ranking)
 as REST endpoints.  New modules will add endpoints as they are completed.
 """
 
+import asyncio
 import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -367,16 +369,24 @@ async def rerank(
         min_seller_rating=min_rating,
         store=store,
     )
-    search_result: SearchResult = retrieval.search(filters)
+    MAX_RERANK_CANDIDATES = 200
+    search_result: SearchResult = retrieval.search(
+        filters, max_results=MAX_RERANK_CANDIDATES,
+    )
 
-    # Step 2: Module 2 heuristic re-ranking
-    ranked: RankedResult = ranker.rank(
-        search_result,
-        strategy=rerank_strategy,
-        target_category=category,
-        max_results=max_results,
-        k=k,
-        seed=seed,
+    # Step 2: Module 2 heuristic re-ranking (run in thread to avoid blocking)
+    loop = asyncio.get_event_loop()
+    ranked: RankedResult = await loop.run_in_executor(
+        None,
+        partial(
+            ranker.rank,
+            search_result,
+            strategy=rerank_strategy,
+            target_category=category,
+            max_results=max_results,
+            k=k,
+            seed=seed,
+        ),
     )
 
     # Build response items with full product data

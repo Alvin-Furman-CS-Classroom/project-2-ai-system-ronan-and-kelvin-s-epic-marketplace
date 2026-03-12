@@ -1,47 +1,91 @@
-import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Loader2, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, TrendingUp, Search, ArrowUpDown } from "lucide-react";
 import { fetchCategories, searchProducts, fetchRerank } from "../api";
-import type { Category, Product, SearchParams, RerankItem } from "../types";
+import type { Category, Product, RerankItem } from "../types";
 import Navbar from "../components/Navbar";
-import FilterSidebar from "../components/FilterSidebar";
-import ProductCard from "../components/ProductCard";
 import Footer from "../components/Footer";
 
+const SEARCH_STRATEGIES = [
+  { value: "linear", label: "Linear Scan" },
+  { value: "bfs", label: "BFS (Breadth-First)" },
+  { value: "dfs", label: "DFS (Depth-First)" },
+  { value: "priority", label: "Priority (A*)" },
+];
+
 const RERANK_STRATEGIES = [
-  { value: "baseline", label: "Baseline (Heuristic Sort)" },
+  { value: "baseline", label: "Baseline (Sort by Score)" },
   { value: "hill_climbing", label: "Hill Climbing" },
   { value: "simulated_annealing", label: "Simulated Annealing" },
 ];
 
+function MiniProductRow({
+  product,
+  rank,
+  rankChange,
+  score,
+}: {
+  product: Product;
+  rank: number;
+  rankChange?: number | null;
+  score?: number | null;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-white p-2.5 transition hover:shadow-sm">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+        {rank}
+      </span>
+      <img
+        src={
+          product.image_url ||
+          "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=80&h=80&fit=crop"
+        }
+        alt=""
+        className="h-12 w-12 shrink-0 rounded object-contain bg-gray-50"
+        loading="lazy"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium leading-tight">
+          {product.title}
+        </p>
+        <p className="text-xs text-[var(--color-text-muted)]">
+          ${product.price.toFixed(2)} &middot; {product.seller_rating.toFixed(1)} stars
+          {product.rating_number ? ` (${product.rating_number.toLocaleString()})` : ""}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        {score != null && (
+          <p className="text-xs font-semibold text-[var(--color-brand)]">
+            {score.toFixed(3)}
+          </p>
+        )}
+        {rankChange != null && rankChange !== 0 && (
+          <p
+            className={`text-xs font-bold ${
+              rankChange > 0 ? "text-green-600" : "text-red-500"
+            }`}
+          >
+            {rankChange > 0 ? "\u2191" : "\u2193"}
+            {Math.abs(rankChange)}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function RerankComparisonPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const filtersFromURL = useCallback((): SearchParams => ({
-    q: searchParams.get("q") || undefined,
-    category: searchParams.get("category") || undefined,
-    price_min: searchParams.get("price_min")
-      ? Number(searchParams.get("price_min"))
-      : undefined,
-    price_max: searchParams.get("price_max")
-      ? Number(searchParams.get("price_max"))
-      : undefined,
-    min_rating: searchParams.get("min_rating")
-      ? Number(searchParams.get("min_rating"))
-      : undefined,
-    store: searchParams.get("store") || undefined,
-    sort_by: searchParams.get("sort_by") || undefined,
-    strategy: searchParams.get("strategy") || "linear",
-    page: 1,
-    page_size: 24,
-  }), [searchParams]);
-
-  const [filters, setFilters] = useState<SearchParams>(filtersFromURL);
+  const [searchStrategy, setSearchStrategy] = useState("linear");
   const [rerankStrategy, setRerankStrategy] = useState("hill_climbing");
-  const [searchProductsList, setSearchProductsList] = useState<Product[]>([]);
-  const [rerankItems, setRerankItems] = useState<RerankItem[]>([]);
+  const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [searchProducts_, setSearchProducts_] = useState<Product[]>([]);
+  const [rerankItems, setRerankItems] = useState<RerankItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rerankMeta, setRerankMeta] = useState<{
+    iterations: number;
+    objective_value: number;
+    elapsed_ms: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchCategories()
@@ -50,49 +94,29 @@ export default function RerankComparisonPage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(filters)) {
-      if (v !== undefined && v !== null && v !== "" && k !== "page" && k !== "page_size") {
-        params.set(k, String(v));
-      }
-    }
-    params.set("rerank_strategy", rerankStrategy);
-    setSearchParams(params, { replace: true });
-  }, [filters, rerankStrategy, setSearchParams]);
-
-  useEffect(() => {
     let cancelled = false;
-    const current = filtersFromURL();
+    setLoading(true);
 
     const searchParams = {
-      category: current.category,
-      price_min: current.price_min,
-      price_max: current.price_max,
-      min_rating: current.min_rating,
-      store: current.store,
+      category: category || undefined,
+      strategy: searchStrategy,
       page: 1,
-      page_size: 24,
+      page_size: 12,
     };
 
     const rerankParams = {
-      category: current.category,
-      price_min: current.price_min,
-      price_max: current.price_max,
-      min_rating: current.min_rating,
-      store: current.store,
+      category: category || undefined,
       rerank_strategy: rerankStrategy,
-      max_results: 24,
+      max_results: 12,
       k: 10,
     };
 
-    Promise.all([
-      searchProducts(searchParams),
-      fetchRerank(rerankParams),
-    ])
+    Promise.all([searchProducts(searchParams), fetchRerank(rerankParams)])
       .then(([searchRes, rerankRes]) => {
         if (!cancelled) {
-          setSearchProductsList(searchRes.products);
+          setSearchProducts_(searchRes.products);
           setRerankItems(rerankRes.items);
+          setRerankMeta(rerankRes.metadata);
           setLoading(false);
         }
       })
@@ -103,40 +127,71 @@ export default function RerankComparisonPage() {
         }
       });
 
-    return () => { cancelled = true; };
-  }, [searchParams, rerankStrategy, filtersFromURL]);
+    return () => {
+      cancelled = true;
+    };
+  }, [searchStrategy, rerankStrategy, category]);
 
-  function handleFilterChange(next: SearchParams) {
-    setLoading(true);
-    setFilters({ ...next, page: 1, page_size: 24 });
-  }
-
-  const searchRankByProductId = Object.fromEntries(
-    searchProductsList.map((p, i) => [p.id, i + 1])
+  const searchRankById = Object.fromEntries(
+    searchProducts_.map((p, i) => [p.id, i + 1])
   );
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)]">
       <Navbar />
 
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6">
-        <div className="hidden w-60 shrink-0 md:block">
-          <FilterSidebar
-            filters={filters}
-            onChange={handleFilterChange}
-            categories={categories}
-          />
-          <div className="mt-6">
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-              Re-rank Strategy
-            </h4>
+      <div className="mx-auto w-full max-w-6xl px-4 py-6">
+        <h1 className="mb-2 text-2xl font-bold text-[var(--color-text)]">
+          Search vs Re-ranked Results
+        </h1>
+        <p className="mb-6 text-sm text-[var(--color-text-muted)]">
+          See how Module 2 re-ranking reorders Module 1's raw search results.
+          Change the strategies and category below to see the difference.
+        </p>
+
+        {/* Controls */}
+        <div className="mb-6 flex flex-wrap items-end gap-4 rounded-lg border border-[var(--color-border)] bg-white p-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Category
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Search Strategy (Module 1)
+            </label>
+            <select
+              value={searchStrategy}
+              onChange={(e) => setSearchStrategy(e.target.value)}
+              className="rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
+            >
+              {SEARCH_STRATEGIES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Re-rank Strategy (Module 2)
+            </label>
             <select
               value={rerankStrategy}
-              onChange={(e) => {
-                setLoading(true);
-                setRerankStrategy(e.target.value);
-              }}
-              className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
+              onChange={(e) => setRerankStrategy(e.target.value)}
+              className="rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
             >
               {RERANK_STRATEGIES.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -147,82 +202,81 @@ export default function RerankComparisonPage() {
           </div>
         </div>
 
-        <main className="flex-1">
-          <h1 className="mb-4 text-2xl font-bold text-[var(--color-text)]">
-            Search vs Re-ranked Results
-          </h1>
-          <p className="mb-6 text-sm text-[var(--color-text-muted)]">
-            Compare Module 1 raw search results (left) with Module 2 heuristic re-ranking (right).
-            Use the strategy dropdown to switch between baseline, hill climbing, and simulated annealing.
-          </p>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-32">
-              <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand)]" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-              {/* Left: Module 1 raw results */}
-              <div>
-                <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-[var(--color-text)]">
+        {loading ? (
+          <div className="flex items-center justify-center py-32">
+            <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand)]" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Left: Raw search */}
+            <div>
+              <div className="mb-3 rounded-t-lg border-l-4 border-gray-400 bg-gray-50 px-4 py-3">
+                <h2 className="flex items-center gap-2 text-base font-bold text-gray-700">
+                  <Search size={16} />
                   Module 1 — Raw Search
                 </h2>
-                <p className="mb-4 text-xs text-[var(--color-text-muted)]">
-                  {searchProductsList.length} results (filtered, no re-ranking)
+                <p className="text-xs text-gray-500">
+                  {searchProducts_.length} results &middot; strategy: {searchStrategy} &middot; no scoring or optimization
                 </p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-                  {searchProductsList.map((product, i) => (
-                    <div key={product.id} className="relative">
-                      <span className="absolute left-2 top-2 z-10 rounded bg-gray-800 px-1.5 py-0.5 text-xs font-medium text-white">
-                        #{i + 1}
-                      </span>
-                      <ProductCard product={product} />
-                    </div>
-                  ))}
-                </div>
               </div>
-
-              {/* Right: Module 2 re-ranked results */}
-              <div>
-                <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-[var(--color-text)]">
-                  <TrendingUp size={18} className="text-[var(--color-brand)]" />
-                  Module 2 — Re-ranked
-                </h2>
-                <p className="mb-4 text-xs text-[var(--color-text-muted)]">
-                  {rerankItems.length} results (strategy: {rerankStrategy})
-                </p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-                  {rerankItems.map((item) => {
-                    const prevRank = searchRankByProductId[item.product.id];
-                    const rankChange = prevRank != null ? prevRank - item.rank : null;
-                    return (
-                      <div key={item.product.id} className="relative">
-                        <span className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-xs font-medium text-white">
-                          #{item.rank}
-                          {rankChange != null && rankChange !== 0 && (
-                            <span
-                              className={
-                                rankChange > 0
-                                  ? "text-green-200"
-                                  : "text-red-200"
-                              }
-                            >
-                              ({rankChange > 0 ? "+" : ""}{rankChange})
-                            </span>
-                          )}
-                        </span>
-                        <ProductCard product={item.product} />
-                        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                          Score: {item.score.toFixed(3)}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="space-y-2">
+                {searchProducts_.map((product, i) => (
+                  <MiniProductRow
+                    key={product.id}
+                    product={product}
+                    rank={i + 1}
+                  />
+                ))}
+                {searchProducts_.length === 0 && (
+                  <p className="py-8 text-center text-sm text-gray-400">
+                    No results
+                  </p>
+                )}
               </div>
             </div>
-          )}
-        </main>
+
+            {/* Right: Re-ranked */}
+            <div>
+              <div className="mb-3 rounded-t-lg border-l-4 border-[var(--color-brand)] bg-red-50 px-4 py-3">
+                <h2 className="flex items-center gap-2 text-base font-bold text-[var(--color-brand)]">
+                  <TrendingUp size={16} />
+                  Module 2 — Re-ranked
+                </h2>
+                <p className="text-xs text-gray-500">
+                  {rerankItems.length} results &middot; strategy: {rerankStrategy}
+                  {rerankMeta && (
+                    <>
+                      {" "}&middot; NDCG: {rerankMeta.objective_value.toFixed(3)}
+                      {" "}&middot; {rerankMeta.iterations} iters
+                      {" "}&middot; {rerankMeta.elapsed_ms.toFixed(1)}ms
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-2">
+                {rerankItems.map((item) => {
+                  const prevRank = searchRankById[item.product.id];
+                  const rankChange =
+                    prevRank != null ? prevRank - item.rank : null;
+                  return (
+                    <MiniProductRow
+                      key={item.product.id}
+                      product={item.product}
+                      rank={item.rank}
+                      rankChange={rankChange}
+                      score={item.score}
+                    />
+                  );
+                })}
+                {rerankItems.length === 0 && (
+                  <p className="py-8 text-center text-sm text-gray-400">
+                    No results
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <Footer />

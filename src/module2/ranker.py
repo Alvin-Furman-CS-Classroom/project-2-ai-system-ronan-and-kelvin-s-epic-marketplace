@@ -143,6 +143,7 @@ def ndcg_at_k(scores: List[float], k: int) -> float:
 def _hill_climb(
     ordering: List[Tuple[str, float]],
     k: int,
+    relevance: Optional[Dict[str, float]] = None,
     max_iterations: int = 500,
     patience: int = 50,
 ) -> Tuple[List[Tuple[str, float]], int, float]:
@@ -155,14 +156,23 @@ def _hill_climb(
     Args:
         ordering: Current ``(id, score)`` ranking.
         k: NDCG cut-off.
+        relevance: Optional mapping of product ID → ground-truth relevance.
+            When provided, NDCG is computed against these values instead
+            of the composite scores — enabling the optimizer to discover
+            orderings that differ from the baseline score-sort.
         max_iterations: Hard cap on iterations.
         patience: Stop after this many rounds with no improvement.
 
     Returns:
         ``(best_ordering, iterations, best_ndcg)``
     """
+    def _ndcg(order: List[Tuple[str, float]]) -> float:
+        if relevance:
+            return ndcg_at_k([relevance.get(pid, 0.0) for pid, _ in order], k)
+        return ndcg_at_k([s for _, s in order], k)
+
     best = list(ordering)
-    best_ndcg = ndcg_at_k([s for _, s in best], k)
+    best_ndcg = _ndcg(best)
     stale = 0
     iterations = 0
 
@@ -173,7 +183,7 @@ def _hill_climb(
         for i in range(len(best) - 1):
             candidate = list(best)
             candidate[i], candidate[i + 1] = candidate[i + 1], candidate[i]
-            score = ndcg_at_k([s for _, s in candidate], k)
+            score = _ndcg(candidate)
             if score > best_ndcg:
                 best = candidate
                 best_ndcg = score
@@ -196,6 +206,7 @@ def _hill_climb(
 def _simulated_annealing(
     ordering: List[Tuple[str, float]],
     k: int,
+    relevance: Optional[Dict[str, float]] = None,
     initial_temp: float = 1.0,
     cooling_rate: float = 0.995,
     min_temp: float = 0.001,
@@ -210,6 +221,9 @@ def _simulated_annealing(
     Args:
         ordering: Current ``(id, score)`` ranking.
         k: NDCG cut-off.
+        relevance: Optional mapping of product ID → ground-truth relevance.
+            When provided, NDCG is computed against these values instead
+            of the composite scores.
         initial_temp: Starting temperature.
         cooling_rate: Multiplicative decay per iteration (0 < α < 1).
         min_temp: Temperature at which to stop.
@@ -219,9 +233,14 @@ def _simulated_annealing(
     Returns:
         ``(best_ordering, iterations, best_ndcg)``
     """
+    def _ndcg(order: List[Tuple[str, float]]) -> float:
+        if relevance:
+            return ndcg_at_k([relevance.get(pid, 0.0) for pid, _ in order], k)
+        return ndcg_at_k([s for _, s in order], k)
+
     rng = random.Random(seed)
     current = list(ordering)
-    current_ndcg = ndcg_at_k([s for _, s in current], k)
+    current_ndcg = _ndcg(current)
     best = list(current)
     best_ndcg = current_ndcg
     temp = initial_temp
@@ -232,7 +251,6 @@ def _simulated_annealing(
             break
         iterations += 1
 
-        # Pick two random distinct positions and swap
         n = len(current)
         if n < 2:
             break
@@ -240,7 +258,7 @@ def _simulated_annealing(
         candidate = list(current)
         candidate[i], candidate[j] = candidate[j], candidate[i]
 
-        cand_ndcg = ndcg_at_k([s for _, s in candidate], k)
+        cand_ndcg = _ndcg(candidate)
         delta = cand_ndcg - current_ndcg
 
         if delta > 0 or rng.random() < math.exp(delta / temp):
@@ -355,17 +373,26 @@ class HeuristicRanker:
 
         # --- baseline: sort descending by score ---
         scored.sort(key=lambda t: t[1], reverse=True)
-        baseline_ndcg = ndcg_at_k([s for _, s in scored], k)
+
+        # Ground-truth relevance for NDCG: seller rating normalised to [0,1].
+        # This differs from the composite score, so the optimizers can
+        # discover orderings that improve NDCG beyond the baseline sort.
+        relevance = {p.id: p.seller_rating / 5.0 for p in products}
+        baseline_ndcg = ndcg_at_k(
+            [relevance.get(pid, 0.0) for pid, _ in scored], k,
+        )
 
         # --- apply optimiser ---
         iterations = 0
         objective = baseline_ndcg
 
         if strategy == "hill_climbing":
-            scored, iterations, objective = _hill_climb(scored, k)
+            scored, iterations, objective = _hill_climb(
+                scored, k, relevance=relevance,
+            )
         elif strategy == "simulated_annealing":
             scored, iterations, objective = _simulated_annealing(
-                scored, k, seed=seed
+                scored, k, relevance=relevance, seed=seed,
             )
 
         # --- truncate ---
