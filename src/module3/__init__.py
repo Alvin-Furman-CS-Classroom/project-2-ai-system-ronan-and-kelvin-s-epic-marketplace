@@ -16,9 +16,11 @@ Components (Ronan — Category Inference + Orchestrator):
   - exceptions: module-specific exception types
 """
 
-from .tokenizer import tokenize, extract_ngrams
+from .category_inference import CategoryClassifier
+from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
-from .embeddings import ProductEmbedder, EMBEDDING_DIM
+from .query_understanding import QueryResult, QueryUnderstanding
+from .tokenizer import extract_ngrams, tokenize
 
 __all__ = [
     # Tokenizer
@@ -29,4 +31,9 @@ __all__ = [
     # Embeddings
     "ProductEmbedder",
     "EMBEDDING_DIM",
+    # Category inference
+    "CategoryClassifier",
+    # Orchestrator
+    "QueryUnderstanding",
+    "QueryResult",
 ]

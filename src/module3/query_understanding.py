@@ -19,6 +19,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from .category_inference import CategoryClassifier
+from .embeddings import EMBEDDING_DIM, ProductEmbedder
+from .keywords import KeywordExtractor
+
 
 @dataclass
 class QueryResult:
@@ -64,7 +68,9 @@ class QueryUnderstanding:
             corpus_texts: Product text strings for fitting models.
             labels: Category labels for training the classifier.
         """
-        raise NotImplementedError("Ronan: implement QueryUnderstanding.__init__")
+        self._keyword_extractor = KeywordExtractor(corpus_texts)
+        self._embedder = ProductEmbedder(corpus_texts)
+        self._classifier = CategoryClassifier(corpus_texts, labels)
 
     def understand(self, query: str) -> QueryResult:
         """Run the full pipeline on a query.
@@ -75,7 +81,22 @@ class QueryUnderstanding:
         Returns:
             QueryResult with keywords, embedding, and inferred category.
         """
-        raise NotImplementedError("Ronan: implement QueryUnderstanding.understand")
+        keywords = self._keyword_extractor.extract(query, top_k=10)
+        query_embedding = self._embedder.embed_query(query)
+
+        inferred_category: Optional[str] = None
+        confidence = 0.0
+        if query and query.strip():
+            cat, conf = self._classifier.predict(query)
+            inferred_category = cat
+            confidence = conf
+
+        return QueryResult(
+            keywords=keywords,
+            query_embedding=query_embedding,
+            inferred_category=inferred_category,
+            confidence=confidence,
+        )
 
     def search_by_text(
         self,
@@ -96,4 +117,9 @@ class QueryUnderstanding:
         Returns:
             List of (item_id, relevance_score) tuples.
         """
-        raise NotImplementedError("Ronan: implement QueryUnderstanding.search_by_text")
+        if not texts:
+            return []
+
+        # Use embedding similarity as primary relevance signal
+        ranked = self._embedder.rank_by_similarity(query, texts)
+        return ranked[:top_k]
