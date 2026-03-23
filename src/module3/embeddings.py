@@ -129,11 +129,6 @@ class ProductEmbedder:
         return list(self._active_vectors.key_to_index.keys())
 
     @property
-    def vectors(self) -> KeyedVectors:
-        """The active KeyedVectors instance (for downstream components)."""
-        return self._active_vectors
-
-    @property
     def using_glove(self) -> bool:
         """Whether the active vectors are GloVe (True) or Word2Vec (False)."""
         return (

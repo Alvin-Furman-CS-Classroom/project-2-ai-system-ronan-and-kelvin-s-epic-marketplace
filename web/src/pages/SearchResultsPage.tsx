@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, Search, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Tag, Search } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
 import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
 import FilterSidebar from "../components/FilterSidebar";
 import ProductCard from "../components/ProductCard";
+import SkeletonCard from "../components/SkeletonCard";
 import SearchMeta from "../components/SearchMeta";
 import Footer from "../components/Footer";
 
@@ -158,12 +159,12 @@ export default function SearchResultsPage() {
 
           {/* Module 3: "Did you mean?" spell correction */}
           {quInfo?.corrected_query && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5">
-              <Search className="h-4 w-4 shrink-0 text-blue-600" />
-              <span className="text-sm text-blue-800">
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+              <Search className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="text-sm text-amber-800">
                 Did you mean:{" "}
                 <button
-                  className="font-semibold text-blue-900 underline decoration-blue-400 underline-offset-2 hover:text-blue-700"
+                  className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"
                   onClick={() => {
                     const params = new URLSearchParams(searchParams);
                     params.set("q", quInfo.corrected_query!);
@@ -203,25 +204,15 @@ export default function SearchResultsPage() {
                   )}
                 </span>
               ))}
-              {quInfo.expanded_terms?.slice(0, 5).map(([term, sim]) => (
-                <span
-                  key={term}
-                  className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
-                >
-                  <Zap className="h-3 w-3" />
-                  {term}
-                  <span className="text-green-400">
-                    {sim.toFixed(2)}
-                  </span>
-                </span>
-              ))}
             </div>
           )}
 
           {/* Product Grid */}
           {loading ? (
-            <div className="flex items-center justify-center py-32">
-              <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand)]" />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
             </div>
           ) : products.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-32 text-center">

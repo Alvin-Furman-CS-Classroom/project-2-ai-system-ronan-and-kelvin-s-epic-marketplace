@@ -14,6 +14,8 @@ Dependencies (from Kelvin's NLP core):
     - ProductEmbedder.rank_by_similarity(query, texts) -> List[Tuple[str, float]]
 """
 
+import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -22,8 +24,11 @@ import numpy as np
 from .category_inference import CategoryClassifier
 from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
-from .query_expansion import QueryExpander
 from .spell_correction import SpellCorrector
+
+logger = logging.getLogger(__name__)
+
+QUERY_CACHE_SIZE = 256
 
 
 @dataclass
@@ -42,11 +47,6 @@ class QueryResult:
     inferred_category: Optional[str] = None
     confidence: float = 0.0
     corrected_query: Optional[str] = None
-    expanded_terms: List[Tuple[str, float]] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.expanded_terms is None:
-            self.expanded_terms = []
 
 
 class QueryUnderstanding:
@@ -80,7 +80,7 @@ class QueryUnderstanding:
         self._embedder = ProductEmbedder(corpus_texts)
         self._classifier = CategoryClassifier(corpus_texts, labels)
         self._spell_corrector = SpellCorrector(self._embedder.vocabulary)
-        self._query_expander = QueryExpander(self._embedder.vectors)
+        self._cache: OrderedDict[str, QueryResult] = OrderedDict()
 
     def understand(self, query: str) -> QueryResult:
         """Run the full pipeline on a query.
@@ -91,8 +91,13 @@ class QueryUnderstanding:
         Returns:
             QueryResult with keywords, embedding, and inferred category.
         """
+        cache_key = query.strip().lower()
+        if cache_key in self._cache:
+            self._cache.move_to_end(cache_key)
+            logger.debug("Cache hit for query: %s", cache_key)
+            return self._cache[cache_key]
+
         _, suggestion = self._spell_corrector.correct_query(query)
-        _, expanded_terms = self._query_expander.expand(query)
 
         keywords = self._keyword_extractor.extract(query, top_k=10)
         query_embedding = self._embedder.embed_query(query)
@@ -104,14 +109,19 @@ class QueryUnderstanding:
             inferred_category = cat
             confidence = conf
 
-        return QueryResult(
+        result = QueryResult(
             keywords=keywords,
             query_embedding=query_embedding,
             inferred_category=inferred_category,
             confidence=confidence,
             corrected_query=suggestion,
-            expanded_terms=expanded_terms,
         )
+
+        self._cache[cache_key] = result
+        if len(self._cache) > QUERY_CACHE_SIZE:
+            self._cache.popitem(last=False)
+
+        return result
 
     def search_by_text(
         self,
@@ -135,12 +145,6 @@ class QueryUnderstanding:
         if not texts:
             return []
 
-        # Expand the query with related terms before ranking
-        original_tokens, expansions = self._query_expander.expand(query)
-        expanded_query = query
-        if expansions:
-            extra = " ".join(word for word, _ in expansions)
-            expanded_query = f"{query} {extra}"
-
-        ranked = self._embedder.rank_by_similarity(expanded_query, texts)
+        # Use embedding similarity as primary relevance signal
+        ranked = self._embedder.rank_by_similarity(query, texts)
         return ranked[:top_k]
