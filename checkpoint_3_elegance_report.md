@@ -2,13 +2,13 @@
 
 **Module:** Module 3 — Query Understanding (NLP before LLMs)  
 **Date:** March 19, 2026  
-**Reviewed files:** `src/module3/tokenizer.py`, `src/module3/keywords.py`, `src/module3/embeddings.py`, `src/module3/category_inference.py`, `src/module3/query_understanding.py`, `src/module3/exceptions.py`, `src/module3/__init__.py`
+**Reviewed files:** `src/module3/tokenizer.py`, `src/module3/keywords.py`, `src/module3/embeddings.py`, `src/module3/category_inference.py`, `src/module3/query_understanding.py`, `src/module3/spell_correction.py`, `src/module3/exceptions.py`, `src/module3/__init__.py`
 
 ---
 
 ## Summary
 
-Module 3 continues the high code quality established in Modules 1–2. The NLP pipeline is cleanly organized across six source files, each with a single responsibility. Public APIs follow the interface contract agreed between team members, with pure functions where possible (tokenizer), stateful-but-immutable classes elsewhere (KeywordExtractor, ProductEmbedder, CategoryClassifier), and a thin orchestrator (QueryUnderstanding) that composes them. Named constants, type hints, docstrings, and Pythonic idioms are consistent throughout.
+Module 3 continues the high code quality established in Modules 1–2. The NLP pipeline is organized across eight source files with clear boundaries: text preprocessing and n-grams, TF-IDF keywords, Word2Vec/GloVe embeddings with cosine ranking, TF-IDF + logistic category classification, Levenshtein spell correction against the embedding vocabulary, and a thin orchestrator with LRU caching. Public APIs stay predictable—pure helpers where appropriate, stateful components with focused methods elsewhere, and `QueryUnderstanding` composing them without duplicating their logic. Named constants, type hints, docstrings, and Pythonic patterns remain consistent; new work (spell correction, `vocabulary` on the embedder, cache and `corrected_query` on results) fits the existing style rather than introducing a second dialect.
 
 ---
 
@@ -18,102 +18,102 @@ Module 3 continues the high code quality established in Modules 1–2. The NLP p
 
 Names are descriptive, consistent, and follow PEP 8 throughout:
 
-- **Classes:** `KeywordExtractor`, `ProductEmbedder`, `CategoryClassifier`, `QueryUnderstanding`, `QueryResult` — clear, intention-revealing nouns.
-- **Functions:** `tokenize()`, `extract_ngrams()`, `_cosine_similarity()`, `_average_embedding()` — action-oriented verbs/nouns.
-- **Constants:** `EMBEDDING_DIM`, `W2V_WINDOW`, `W2V_MIN_COUNT`, `W2V_EPOCHS`, `W2V_WORKERS`, `W2V_SG`, `MAX_FEATURES`, `MAX_DF`, `MIN_DF`, `MIN_TOKEN_LENGTH`, `GLOVE_DIR`, `GLOVE_FILENAME` — uppercase with clear meaning.
-- **Variables:** `corpus_texts`, `token_scores`, `ranked_pairs`, `active_vectors`, `tokenized_corpus` — no ambiguity.
-- **Parameters:** `top_k`, `use_glove`, `glove_path`, `corpus_texts`, `labels` — self-documenting.
-- No single-letter variables outside tight comprehensions. No misleading names.
+- **Classes:** `KeywordExtractor`, `ProductEmbedder`, `CategoryClassifier`, `SpellCorrector`, `QueryUnderstanding`, `QueryResult` — clear, intention-revealing nouns.
+- **Functions:** `tokenize()`, `extract_ngrams()`, `_levenshtein()`, `_cosine_similarity()`, `_average_embedding()` — action-oriented verbs and well-scoped private helpers.
+- **Constants:** `EMBEDDING_DIM`, `W2V_*`, `MAX_FEATURES`, `MAX_DF`, `MIN_DF`, `MIN_TOKEN_LENGTH`, `GLOVE_DIR`, `GLOVE_FILENAME`, `MAX_EDIT_DISTANCE`, `MIN_WORD_LENGTH`, `QUERY_CACHE_SIZE` — uppercase with unambiguous meaning.
+- **Variables:** `corpus_texts`, `token_scores`, `ranked_pairs`, `active_vectors`, `tokenized_corpus`, `_vocab_by_length`, `cache_key` — readable and specific.
+- **Parameters:** `top_k`, `use_glove`, `glove_path`, `vocabulary` — self-documenting.
+- No single-letter variables outside tight loops. No misleading names.
 
 ### 2. Function and Method Design — **4/4**
 
 Functions are concise, focused, and each does one thing well:
 
-- **`tokenize()`** is a pure function: text in, tokens out. ~15 lines including regex cleanup, NLTK tokenization, and stopword filtering.
-- **`extract_ngrams()`** is a 3-line pure function generating underscore-joined n-grams.
-- **`KeywordExtractor.extract()`** is ~15 lines: tokenize → transform → score → rank → truncate.
-- **`_cosine_similarity()`** is a standalone 5-line utility with zero-norm safety.
-- **`_average_embedding()`** is a 6-line method: filter in-vocab tokens → stack vectors → mean.
-- **`ProductEmbedder.embed_query/embed_text/similarity/rank_by_similarity`** form a clean public API, each 2–5 lines, composing the internal helpers.
-- **`CategoryClassifier.predict()`** is 8 lines: empty check → transform → predict → extract confidence.
-- **`QueryUnderstanding.understand()`** is 10 lines: extract keywords → embed → classify → wrap in QueryResult.
-- No function exceeds reasonable length. No god methods.
+- **`tokenize()`** remains a pure function: text in, tokens out, with regex cleanup, NLTK tokenization, and stopword filtering.
+- **`extract_ngrams()`** is a short pure function producing underscore-joined n-grams.
+- **`KeywordExtractor.extract()`** follows tokenize → transform → score → rank → truncate without sprawl.
+- **`_levenshtein()`** is a compact dynamic-programming implementation (~15 lines), space-optimized to a single row of length \(O(m)\).
+- **`SpellCorrector.correct_token()`** encapsulates OOV detection, length-pruned candidate search, and distance minimization; returns `(corrected, was_corrected)` so callers get an explicit boolean.
+- **`SpellCorrector.correct_query()`** is a straight pipeline: tokenize → correct each token → rejoin; empty or whitespace queries short-circuit cleanly.
+- **`_cosine_similarity()`** and **`_average_embedding()`** stay small helpers with clear contracts.
+- **`ProductEmbedder`** methods (`embed_query`, `embed_text`, `similarity`, `rank_by_similarity`) compose internals in two to a handful of lines each.
+- **`CategoryClassifier.predict()`** keeps the empty-check → transform → predict → confidence path linear.
+- **`QueryUnderstanding.understand()`** orders work as cache lookup → spell suggestion → keywords → embedding → optional classification → `QueryResult`, plus cache eviction—still readable end-to-end.
+- No function grows into a “god method.”
 
 ### 3. Abstraction and Modularity — **4/4**
 
 Abstraction is well-judged:
 
-- **Clear file boundaries:** tokenizer (text preprocessing), keywords (TF-IDF), embeddings (Word2Vec/GloVe), category_inference (classification), query_understanding (orchestration), exceptions (error types).
-- **Components are independently testable:** Each can be instantiated and tested without the others. Unit tests do exactly this.
-- **Orchestrator is thin:** `QueryUnderstanding.__init__` creates the three components; `understand()` calls each one and wraps results. No business logic duplicated.
-- **Interface contract honored:** Kelvin's `tokenize()`, `KeywordExtractor`, `ProductEmbedder` exactly match the signatures Ronan's code imports and calls.
-- **Exception hierarchy extends Module 1:** `QueryUnderstandingError` → `EpicMarketplaceError`.
-- **`__init__.py`** exports only the public API via `__all__`.
-- No over-engineering. The optional GloVe support is cleanly isolated in `_load_glove()`.
+- **Clear file boundaries:** tokenizer (preprocessing, stopwords, n-grams), keywords (TF-IDF), embeddings (Word2Vec/GloVe, similarity), category_inference (classifier), spell_correction (dictionary + edit distance), query_understanding (orchestration + cache), exceptions (types), `__init__.py` (exports).
+- **Components are independently testable:** Each major type can be constructed and exercised on its own; unit tests mirror that separation.
+- **Orchestrator stays thin:** It wires `KeywordExtractor`, `ProductEmbedder`, `CategoryClassifier`, and `SpellCorrector`; `understand()` delegates behavior instead of reimplementing token or vector logic.
+- **Spell correction is decoupled:** `SpellCorrector` depends on a vocabulary list and shared `tokenize()`, not on the full embedder API—yet the orchestrator naturally supplies `ProductEmbedder.vocabulary` so the “dictionary” matches the active vectors.
+- **Interface contract:** Documented expectations for `tokenize`, `KeywordExtractor`, and `ProductEmbedder` remain aligned with how the orchestrator calls them.
+- **Exception hierarchy:** `QueryUnderstandingError` extends `EpicMarketplaceError`; specialized types remain available for embedding and category failures.
+- **`__init__.py`** exports a minimal public surface via `__all__`, now including `SpellCorrector`.
+- Optional GloVe loading stays isolated in `_load_glove()` without complicating the rest of the embedder.
 
 ### 4. Style Consistency — **4/4**
 
-Code style is consistent across all files and with Modules 1–2:
+Code style matches across files and with earlier modules:
 
-- PEP 8 followed throughout: 4-space indentation, snake_case, PascalCase for classes.
-- Consistent Google-style docstrings with Args, Returns, and Example sections.
-- Import ordering: stdlib → third-party (numpy, gensim, sklearn, nltk) → local.
-- Blank line spacing between methods is uniform.
-- All files start with module-level docstrings explaining purpose and owner.
-- Section dividers (`# ---`) separate logical groups (same pattern as Modules 1–2).
-- Type hints match project conventions: `List[str]`, `List[Tuple[str, float]]`, `Optional[str]`, `np.ndarray`.
-- Trailing commas in multi-line calls.
+- PEP 8: 4-space indentation, `snake_case`, PascalCase for classes.
+- Google-style docstrings with Args, Returns, and examples where they add value.
+- Import order: stdlib → third-party → local; `OrderedDict` alongside other stdlib imports in the orchestrator.
+- Uniform spacing between methods; module docstrings at file top.
+- Section dividers (`# ---` / `# -----`) group related blocks the same way as Modules 1–2.
+- Type hints follow project habits: `List`, `Tuple`, `Optional`, `Dict`, `np.ndarray`.
+- Multi-line calls use trailing commas consistently.
 
 ### 5. Code Hygiene — **4/4**
 
-The codebase is clean:
+The codebase stays clean:
 
-- **No dead code** — every function, class, and import is used.
-- **No duplication** — `tokenize()` is called by both `KeywordExtractor` and `ProductEmbedder` (DRY). `_cosine_similarity()` is shared across all similarity computations.
-- **Named constants throughout:** All hyperparameters (`EMBEDDING_DIM`, `W2V_WINDOW`, `MAX_FEATURES`, `MIN_DF`, etc.) are named constants, not magic numbers.
-- **TF-IDF fallback** for small corpora is cleanly handled with a try/except that relaxes df constraints.
-- **No leftover imports**, no unused variables, no commented-out blocks.
-- **Logging:** Uses `logger.info()` for training progress and `logger.warning()` for missing GloVe — consistent with Modules 1–2.
+- **No dead code** in reviewed paths—each import and member supports the pipeline or tests.
+- **DRY:** `tokenize()` is shared by keywords, embeddings, and spell correction; `_cosine_similarity()` centralizes similarity math; vocabulary is obtained once from the embedder for the corrector.
+- **Named constants:** Embedding hyperparameters, TF-IDF bounds, `MAX_EDIT_DISTANCE`, `MIN_WORD_LENGTH`, and `QUERY_CACHE_SIZE` avoid magic numbers.
+- **TF-IDF small-corpus fallback** in `KeywordExtractor` remains a focused retry rather than scattered conditionals.
+- **SpellCorrector index:** `_vocab_by_length` is built once at construction—no repeated full-vocab scans for every token length.
+- **No stray commented-out blocks**, no unused imports in the reviewed module set.
+- **Logging:** `logger.info` / `logger.warning` / `logger.debug` for training, missing GloVe, corrector build, and cache hits—consistent with the rest of the project.
 
 ### 6. Control Flow Clarity — **4/4**
 
-Control flow is clear and linear:
+Control flow reads linearly:
 
-- **Early returns** in `tokenize()` (empty/whitespace text), `extract()` (empty tokens), `predict()` (empty query), `search_by_text()` (empty texts).
-- **`_average_embedding()`** returns zero vector if no in-vocab tokens — no exception, clean fallback.
-- **GloVe loading** uses `Optional` pattern: try to load → return None on failure → fallback to Word2Vec. No deeply nested conditionals.
-- **`understand()`** is a straight-line pipeline: extract keywords → embed → classify → wrap. Only one conditional (skip classification for empty queries).
-- **Nesting** never exceeds 2 levels.
-- **No complex branching.** Strategy dispatch is not needed here — the pipeline is linear.
+- **Early returns** in `tokenize()`, keyword `extract()`, classifier `predict()`, `rank_by_similarity` inputs, and `correct_query()` for empty input.
+- **`_average_embedding()`** returns a zero vector when nothing is in vocabulary—no exceptions for the common empty case.
+- **GloVe path:** try load → `None` + warning → Word2Vec as active vectors; shallow branching.
+- **`understand()`:** cache hit updates LRU order and returns; miss runs spell correction then the rest, stores result, evicts oldest when over capacity.
+- **`correct_token()`:** in-vocab and short-token guards exit immediately; candidate loops only over lengths in `[len(token) ± MAX_EDIT_DISTANCE]`.
+- Nesting stays shallow; no switch-style maze for the main pipeline.
 
 ### 7. Pythonic Idioms — **4/4**
 
-Code leverages Python idioms effectively:
+The code uses Python’s strengths naturally:
 
-- **Dataclass** for `QueryResult` with optional fields and defaults.
-- **List comprehensions** for tokenized corpus, vector collection, scored pairs.
-- **`np.mean(vectors, axis=0)`** for average embedding — idiomatic numpy.
-- **`np.linalg.norm()`** for vector norms.
-- **Properties** (`.vocabulary_size`, `.using_glove`) for computed attributes.
-- **Module-level `_STOPWORDS = set(...)`** for O(1) lookup — frozenset-like pattern.
-- **`re.sub()`** for regex-based text cleaning.
-- **`word_tokenize()`** from NLTK — using the standard library for tokenization.
-- **`TfidfVectorizer`** and `LogisticRegression` from scikit-learn — standard ML toolkit.
-- **`KeyedVectors`** from Gensim for embedding access.
-- **`Dict[str, int]`** type annotation for vocabulary mapping.
+- **`@dataclass`** for `QueryResult`, including optional `corrected_query` for “Did you mean?” style UIs.
+- **`OrderedDict`** LRU: `move_to_end` on hit, `popitem(last=False)` on overflow—standard pattern for bounded caches.
+- **Cache key** `query.strip().lower()` gives case-insensitive deduplication without normalizing stored display text.
+- **List comprehensions** for corpora, scored pairs, and vector gathering where they improve clarity.
+- **`np.mean` / `np.linalg.norm`** for aggregation and cosine safety.
+- **Properties:** `ProductEmbedder.vocabulary`, `vocabulary_size`, `using_glove`; `SpellCorrector.vocabulary_size`—computed state exposed read-only.
+- **`setdefault`** when grouping vocabulary by length in `SpellCorrector.__init__`.
+- **Module-level `_STOPWORDS`** (or equivalent) for O(1) membership checks in tokenization.
+- **scikit-learn** `TfidfVectorizer` / `LogisticRegression`, **gensim** `Word2Vec` / `KeyedVectors`, **NLTK** `word_tokenize`—idiomatic stack choices.
 
 ### 8. Error Handling — **4/4**
 
-Errors are handled thoughtfully:
+Failures and edge cases are handled deliberately:
 
-- **`QueryUnderstandingError`** inherits from `EpicMarketplaceError` — consistent hierarchy.
-- **`CategoryInferenceError`** and `EmbeddingError`** available for specific failure modes.
-- **`CategoryClassifier.__init__`** validates inputs: mismatched corpus/labels raises `ValueError` with descriptive message; empty corpus raises `ValueError`.
-- **TF-IDF fallback:** `KeywordExtractor.__init__` catches `ValueError` from sklearn when df pruning removes all terms, and retries with relaxed settings.
-- **GloVe not found:** `_load_glove()` returns `None` with a warning — no crash, clean fallback.
-- **Zero-vector safety:** `_cosine_similarity()` returns 0.0 for zero-norm vectors — no division by zero.
-- **Empty query handling:** `predict()` returns (first_label, 0.0); `understand()` returns empty keywords and zero embedding.
-- **No bare `except:` clauses.** No silenced errors.
+- **Custom hierarchy:** `QueryUnderstandingError` → `EpicMarketplaceError`; `CategoryInferenceError` and `EmbeddingError` for narrower failures.
+- **`CategoryClassifier.__init__`** validates corpus/label alignment and non-empty training data with clear `ValueError` messages.
+- **TF-IDF init:** catches sklearn `ValueError` when document frequency pruning is too aggressive and retries with relaxed `min_df` / `max_df`.
+- **Missing GloVe:** `_load_glove()` returns `None` and logs—training and query paths keep working on Word2Vec.
+- **`_cosine_similarity()`** guards zero norms—no divide-by-zero.
+- **Empty queries:** classifier and keyword paths behave predictably; spell correction returns the original string and `None` suggestion when there is nothing to fix.
+- **No bare `except:`** and no swallowed exceptions in the reviewed code.
 
 ---
 

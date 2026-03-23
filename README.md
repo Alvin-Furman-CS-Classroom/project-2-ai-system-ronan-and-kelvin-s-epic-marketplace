@@ -83,14 +83,26 @@ Example: `QueryResult(keywords=[("bluetooth", 0.72), ("headphones", 0.69)], quer
 - `embeddings.py` — Custom Word2Vec trained on product text (skip-gram, 100-d), optional GloVe loader, cosine similarity ranking
 - `category_inference.py` — TF-IDF + Logistic Regression classifier trained on product text → category
 - `query_understanding.py` — Orchestrator combining all components into a single `understand(query)` call
+- `spell_correction.py` — Levenshtein edit-distance spell correction against Word2Vec vocabulary, suggests corrected queries for misspelled tokens (edit distance ≤ 2)
+- NLP query cache — 256-entry LRU cache on `understand()` so repeated queries skip the full NLP pipeline
 
 **API integration:**
 - `/api/search?q=...` — When `q` is provided, Module 3 infers category (used if user didn't pick one), then re-ranks candidates by embedding cosine similarity
 - `/api/query-understand?q=...` — Debug endpoint returning raw NLP pipeline output
+- `/api/autocomplete?q=...` — Fast prefix-match autocomplete returning matching product titles and categories
+- `/api/products/{id}/similar` — Returns 8 most similar products using Word2Vec embedding cosine similarity
+
+**Frontend:**
+- "Did you mean?" spell correction banner (amber banner with click-to-search)
+- Search autocomplete typeahead dropdown with debounced suggestions (categories with purple icon, products with package icon, keyboard navigation)
+- Search history + trending searches shown when search bar is focused (recent searches with clock icon, trending with trending icon, removable history items)
+- "Recently Viewed" products section on homepage and search results (localStorage, up to 10 products, horizontal scrollable)
+- "Customers Also Viewed" similar products grid on product detail page (lazy-loaded after main content)
+- Skeleton loading cards on search results and product detail pages
 
 **Dependencies:** NLP unit (NLTK tokenization, TF-IDF, Word2Vec, Logistic Regression)
 
-**Tests:** 74 tests — tokenizer (19), keywords (12), embeddings (22), category inference (9), orchestrator (8), integration with Modules 1-2 (4)
+**Tests:** 96 tests — tokenizer (19), keywords (12), embeddings (22), category inference (9), orchestrator (8), spell correction (22), integration with Modules 1-2 (4)
 
 ### Module 4: Learning-to-Rank (Supervised Learning)
 
@@ -284,7 +296,7 @@ pytest unit_tests/ -v --cov=src
 | ---------- | ---- | ---------------- | ------ | -------- |
 | 1 | Feb 11 | Module 1 | Complete | 182 tests (unit + integration), 4 search strategies over category tree, typed `SearchResult`, custom exceptions, structured logging, category index, BFS/DFS pruning — see [Evidence of Usage](#evidence-of-usage) |
 | 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
-| 3 | Mar 19 | Modules 1-3 | Complete | 397 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), `/api/search?q=` wired, `/api/query-understand` debug endpoint, inferred category chip in frontend |
+| 3 | Mar 19 | Modules 1-3 | Complete | 423 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 22 spell correction + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), spell correction, 256-entry NLP LRU cache, `/api/search?q=`, `/api/query-understand`, `/api/autocomplete`, `/api/products/{id}/similar`, inferred category chip, "Did you mean?" banner, autocomplete typeahead, search history + trending, recently viewed, customers also viewed (similar products), skeleton loading |
 | 4 | Apr 2 | Modules 1-4 |  |  |
 
 ## Evidence of Usage
@@ -333,7 +345,7 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-397 passed in 2.60s
+423 passed in 2.60s
 ```
 
 | Suite | Location | Count | Focus |
@@ -356,6 +368,9 @@ $ pytest --tb=no -q
 | Category Inference | `unit_tests/module3/test_category_inference.py` | 9 | Classifier accuracy, confidence range, validation, empty queries |
 | Query Understanding | `unit_tests/module3/test_query_understanding.py` | 8 | End-to-end pipeline, QueryResult fields, search_by_text |
 | Integration Module 3 | `integration_tests/module3/test_module3_integration.py` | 4 | Full pipeline, category feeds Module 2, text relevance ranking |
+| Spell Correction | `unit_tests/module3/test_spell_correction.py` | 22 | Levenshtein distance, token correction, query correction, edge cases |
+
+**Total:** 423 tests
 
 ## Checkpoint 3 Reflection
 
@@ -394,10 +409,22 @@ and inferred categories) using pre-LLM techniques.
    and Ronan built the category inference, orchestrator, and integration tests.
    Clear interface contracts ensured both halves snapped together on first merge.
 
-6. **Test expansion** — 397 tests (up from 327 at Checkpoint 2) now cover
+6. **Test expansion** — 423 tests (up from 327 at Checkpoint 2) now cover
    tokenization edge cases, TF-IDF scoring, embedding shapes and similarity,
-   category classifier accuracy, end-to-end orchestration, and Module 3 feeding
-   into Modules 1-2.
+   category classifier accuracy, end-to-end orchestration, spell correction
+   (Levenshtein and SpellCorrector), and Module 3 feeding into Modules 1-2.
+
+7. **Spell correction** — "Did you mean?" feature uses Levenshtein edit distance against the Word2Vec vocabulary to suggest corrections for misspelled query tokens, surfaced in the UI as a clickable amber banner.
+
+8. **Search autocomplete** — As-you-type suggestions from a new `/api/autocomplete` endpoint showing matching categories and product titles, with full keyboard navigation support.
+
+9. **Search history + trending** — Recent searches stored in localStorage appear in the search bar dropdown alongside hardcoded trending queries, with remove-from-history support.
+
+10. **"Recently Viewed" products** — Tracks last 10 clicked products in localStorage via a `useSyncExternalStore` hook, displayed on the homepage and search results page.
+
+11. **"Customers Also Viewed" similar products** — Product detail page shows 8 semantically similar products found via Word2Vec cosine similarity, lazy-loaded after the main content.
+
+12. **Performance: skeleton loading + NLP cache** — Shimmer skeleton cards replace loading spinners, and a 256-entry LRU cache on `QueryUnderstanding.understand()` makes repeated queries instant.
 
 ## Checkpoint 2 Reflection
 
