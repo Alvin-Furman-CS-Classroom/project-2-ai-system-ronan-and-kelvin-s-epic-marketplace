@@ -116,6 +116,18 @@ export interface RerankParams {
   k?: number;
 }
 
+/** Single autocomplete suggestion */
+export interface AutocompleteSuggestion {
+  text: string;
+  type: "category" | "product";
+  id?: string;
+}
+
+/** Response from GET /api/autocomplete */
+export interface AutocompleteResponse {
+  suggestions: AutocompleteSuggestion[];
+}
+
 /** Response from GET /api/query-understand */
 export interface QueryUnderstandResponse {
   query: string;

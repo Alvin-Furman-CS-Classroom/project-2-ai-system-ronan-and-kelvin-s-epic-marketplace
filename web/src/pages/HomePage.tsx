@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
-  Search,
   Cpu,
   Smartphone,
   Headphones,
@@ -15,6 +14,7 @@ import {
 import { fetchCategories, fetchProducts, fetchDeals } from "../api";
 import type { Category, Product, DealProduct } from "../types";
 import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
+import SearchBar from "../components/SearchBar";
 import ProductCard from "../components/ProductCard";
 import Footer from "../components/Footer";
 
@@ -33,8 +33,6 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [trending, setTrending] = useState<Product[]>([]);
   const [deals, setDeals] = useState<DealProduct[]>([]);
-  const [query, setQuery] = useState("");
-  const navigate = useNavigate();
   const { items: recentlyViewed } = useRecentlyViewed();
 
   useEffect(() => {
@@ -42,13 +40,6 @@ export default function HomePage() {
     fetchProducts(12, 0).then(setTrending).catch(console.error);
     fetchDeals(undefined, 8).then((r) => setDeals(r.deals)).catch(console.error);
   }, []);
-
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    navigate(`/search?${params.toString()}`);
-  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -76,25 +67,9 @@ export default function HomePage() {
               Compare Search vs Re-ranked Results
             </Link>
           </p>
-          <form
-            onSubmit={handleSearch}
-            className="mx-auto mt-8 flex max-w-2xl items-center overflow-hidden rounded-full bg-white shadow-lg"
-          >
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for headphones, laptops, cables..."
-              className="flex-1 bg-transparent px-6 py-3.5 text-sm text-[var(--color-text)] placeholder:text-gray-400 focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="m-1.5 flex items-center gap-2 rounded-full bg-[var(--color-brand)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-brand-dark)]"
-            >
-              <Search size={16} />
-              Search
-            </button>
-          </form>
+          <div className="mx-auto mt-8 max-w-2xl">
+            <SearchBar />
+          </div>
         </div>
       </section>
 

@@ -509,6 +509,48 @@ async def get_product_deal(product_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Autocomplete
+# ---------------------------------------------------------------------------
+@app.get("/api/autocomplete")
+async def autocomplete(
+    q: str = Query("", description="Partial query text"),
+    limit: int = Query(8, ge=1, le=20),
+):
+    """
+    Fast prefix-match autocomplete against product titles and categories.
+    Returns up to `limit` suggestions grouped by type.
+    """
+    if not catalog:
+        raise HTTPException(503, "Catalog not loaded")
+
+    needle = q.strip().lower()
+    if not needle:
+        return {"suggestions": []}
+
+    seen: set[str] = set()
+    suggestions: list[dict] = []
+
+    categories = sorted({p.category for p in catalog})
+    for cat in categories:
+        if needle in cat.lower() and cat not in seen:
+            suggestions.append({"text": cat, "type": "category"})
+            seen.add(cat)
+            if len(suggestions) >= limit:
+                return {"suggestions": suggestions}
+
+    for product in catalog:
+        if len(suggestions) >= limit:
+            break
+        title = product.title
+        if needle in title.lower() and title not in seen:
+            display = title if len(title) <= 60 else title[:57] + "..."
+            suggestions.append({"text": display, "type": "product", "id": product.id})
+            seen.add(title)
+
+    return {"suggestions": suggestions}
+
+
+# ---------------------------------------------------------------------------
 # Module 3: Query Understanding debug endpoint
 # ---------------------------------------------------------------------------
 @app.get("/api/query-understand")
