@@ -20,6 +20,7 @@ from .category_inference import CategoryClassifier
 from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
 from .query_understanding import QueryResult, QueryUnderstanding
+from .spell_correction import SpellCorrector
 from .tokenizer import extract_ngrams, tokenize
 
 __all__ = [
@@ -33,6 +34,8 @@ __all__ = [
     "EMBEDDING_DIM",
     # Category inference
     "CategoryClassifier",
+    # Spell correction
+    "SpellCorrector",
     # Orchestrator
     "QueryUnderstanding",
     "QueryResult",

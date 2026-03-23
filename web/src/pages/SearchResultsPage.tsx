@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, X } from "lucide-react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, X, Search } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
 import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
@@ -28,6 +28,7 @@ function pageRange(current: number, total: number): (number | "…")[] {
 
 export default function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Derive filters + page from URL
   const filtersFromURL = useCallback((): SearchParams => ({
@@ -155,6 +156,27 @@ export default function SearchResultsPage() {
             </h1>
             {metadata && <div className="mt-2"><SearchMeta metadata={metadata} /></div>}
           </div>
+
+          {/* Module 3: "Did you mean?" spell correction */}
+          {quInfo?.corrected_query && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+              <Search className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="text-sm text-amber-800">
+                Did you mean:{" "}
+                <button
+                  className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.set("q", quInfo.corrected_query!);
+                    navigate(`/search?${params.toString()}`, { replace: true });
+                  }}
+                >
+                  {quInfo.corrected_query}
+                </button>
+                ?
+              </span>
+            </div>
+          )}
 
           {/* Module 3: Query Understanding Chips */}
           {quInfo && (

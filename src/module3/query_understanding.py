@@ -22,6 +22,7 @@ import numpy as np
 from .category_inference import CategoryClassifier
 from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
+from .spell_correction import SpellCorrector
 
 
 @dataclass
@@ -39,6 +40,7 @@ class QueryResult:
     query_embedding: np.ndarray
     inferred_category: Optional[str] = None
     confidence: float = 0.0
+    corrected_query: Optional[str] = None
 
 
 class QueryUnderstanding:
@@ -71,6 +73,7 @@ class QueryUnderstanding:
         self._keyword_extractor = KeywordExtractor(corpus_texts)
         self._embedder = ProductEmbedder(corpus_texts)
         self._classifier = CategoryClassifier(corpus_texts, labels)
+        self._spell_corrector = SpellCorrector(self._embedder.vocabulary)
 
     def understand(self, query: str) -> QueryResult:
         """Run the full pipeline on a query.
@@ -81,6 +84,8 @@ class QueryUnderstanding:
         Returns:
             QueryResult with keywords, embedding, and inferred category.
         """
+        _, suggestion = self._spell_corrector.correct_query(query)
+
         keywords = self._keyword_extractor.extract(query, top_k=10)
         query_embedding = self._embedder.embed_query(query)
 
@@ -96,6 +101,7 @@ class QueryUnderstanding:
             query_embedding=query_embedding,
             inferred_category=inferred_category,
             confidence=confidence,
+            corrected_query=suggestion,
         )
 
     def search_by_text(

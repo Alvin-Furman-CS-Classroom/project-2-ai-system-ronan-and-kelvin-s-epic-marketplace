@@ -90,6 +90,7 @@ class QueryUnderstandingInfo(BaseModel):
     keywords: List[List] = Field(default_factory=list)
     inferred_category: Optional[str] = None
     confidence: float = 0.0
+    corrected_query: Optional[str] = None
 
 
 class SearchMetadata(BaseModel):
@@ -327,6 +328,7 @@ async def search(
             keywords=[[kw, round(sc, 4)] for kw, sc in qr.keywords],
             inferred_category=qr.inferred_category,
             confidence=round(qr.confidence, 4),
+            corrected_query=qr.corrected_query,
         )
         # Use inferred category when user didn't pick one explicitly
         CATEGORY_CONFIDENCE_THRESHOLD = 0.4

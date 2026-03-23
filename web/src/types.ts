@@ -21,6 +21,7 @@ export interface QueryUnderstandingInfo {
   keywords: [string, number][];
   inferred_category: string | null;
   confidence: number;
+  corrected_query: string | null;
 }
 
 export interface SearchMetadata {

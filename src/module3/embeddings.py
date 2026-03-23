@@ -124,6 +124,11 @@ class ProductEmbedder:
         return len(self._active_vectors)
 
     @property
+    def vocabulary(self) -> List[str]:
+        """All words known to the active embedding model."""
+        return list(self._active_vectors.key_to_index.keys())
+
+    @property
     def using_glove(self) -> bool:
         """Whether the active vectors are GloVe (True) or Word2Vec (False)."""
         return (
