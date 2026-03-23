@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, TrendingUp, Search, ArrowUpDown } from "lucide-react";
+import { Loader2, TrendingUp, Search } from "lucide-react";
 import { fetchCategories, searchProducts, fetchRerank } from "../api";
 import type { Category, Product, RerankItem } from "../types";
 import Navbar from "../components/Navbar";

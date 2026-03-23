@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Sparkles, Tag, Search, Clock } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
@@ -32,8 +32,8 @@ export default function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Derive filters + page from URL
-  const filtersFromURL = useCallback((): SearchParams => ({
+  // Derive filters directly from URL — no sync effect needed
+  const filtersFromURL = useMemo((): SearchParams => ({
     q: searchParams.get("q") || undefined,
     category: searchParams.get("category") || undefined,
     price_min: searchParams.get("price_min")
@@ -58,12 +58,6 @@ export default function SearchResultsPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Keep filters state in sync when the URL changes externally
-  // (e.g. Navbar search bar navigates to a new ?q=)
-  useEffect(() => {
-    setFilters(filtersFromURL());
-  }, [searchParams, filtersFromURL]);
-
   // Load categories once
   useEffect(() => {
     fetchCategories()
@@ -71,16 +65,39 @@ export default function SearchResultsPage() {
       .catch(console.error);
   }, []);
 
-  // Sync filters → URL (only when filters change via sidebar/pagination)
-  const syncRef = useRef(false);
+  // Keep filters state in sync for the sidebar
   useEffect(() => {
-    // Skip the first render — filters already match the URL
-    if (!syncRef.current) {
-      syncRef.current = true;
-      return;
-    }
+    setFilters(filtersFromURL);
+  }, [filtersFromURL]);
+
+  // Fetch products whenever URL params change
+  const fetchRef = useRef(0);
+  useEffect(() => {
+    const fetchId = ++fetchRef.current;
+    setProducts([]);
+    setMetadata(null);
+
+    searchProducts(filtersFromURL)
+      .then((res) => {
+        if (fetchId === fetchRef.current) {
+          setProducts(res.products);
+          setMetadata(res.metadata);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (fetchId === fetchRef.current) {
+          console.error(err);
+          setLoading(false);
+        }
+      });
+  }, [filtersFromURL]);
+
+  // Push filter changes to URL — filters are derived from searchParams
+  const pushFilters = useCallback((next: SearchParams) => {
+    setLoading(true);
     const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(filters)) {
+    for (const [k, v] of Object.entries(next)) {
       if (v !== undefined && v !== null && v !== "") {
         params.set(k, String(v));
       }
@@ -88,46 +105,18 @@ export default function SearchResultsPage() {
     if (params.get("page") === "1") params.delete("page");
     params.delete("page_size");
     setSearchParams(params, { replace: true });
-  }, [filters, setSearchParams]);
+  }, [setSearchParams]);
 
-  // Fetch products whenever URL params change
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    const current = filtersFromURL();
-
-    searchProducts(current)
-      .then((res) => {
-        if (!cancelled) {
-          setProducts(res.products);
-          setMetadata(res.metadata);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error(err);
-          setLoading(false);
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [searchParams, filtersFromURL]);
-
-  // Update filters from sidebar — reset to page 1
   function handleFilterChange(next: SearchParams) {
-    setLoading(true);
-    setFilters({ ...next, page: 1, page_size: PAGE_SIZE });
+    pushFilters({ ...next, page: 1, page_size: PAGE_SIZE });
   }
 
-  // Navigate to a specific page
   function goToPage(page: number) {
-    setLoading(true);
-    setFilters((prev) => ({ ...prev, page, page_size: PAGE_SIZE }));
+    pushFilters({ ...filtersFromURL, page, page_size: PAGE_SIZE });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const currentPage = filters.page ?? 1;
+  const currentPage = filtersFromURL.page ?? 1;
   const totalPages = metadata?.total_pages ?? 1;
   const quInfo: QueryUnderstandingInfo | null | undefined =
     metadata?.query_understanding;
