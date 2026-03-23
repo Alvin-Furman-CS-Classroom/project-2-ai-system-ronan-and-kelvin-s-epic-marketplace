@@ -283,6 +283,39 @@ async def get_product(product_id: str):
     return ProductResponse.from_product(product)
 
 
+@app.get("/api/products/{product_id}/similar", response_model=List[ProductResponse])
+async def get_similar_products(
+    product_id: str,
+    limit: int = Query(8, ge=1, le=20),
+):
+    """
+    Find products similar to the given product using Word2Vec embeddings.
+    Uses the product's title + description as the query and ranks all
+    other products by cosine similarity.
+    """
+    if not catalog or not query_understanding:
+        raise HTTPException(503, "Catalog not loaded")
+    try:
+        product = catalog[product_id]
+    except KeyError:
+        raise HTTPException(404, f"Product not found: {product_id}")
+
+    query_text = f"{product.title} {product.description or ''}"
+
+    texts = {
+        p.id: f"{p.title} {p.description or ''}"
+        for p in catalog
+        if p.id != product_id
+    }
+
+    ranked = query_understanding.search_by_text(query_text, texts, top_k=limit)
+
+    return [
+        ProductResponse.from_product(catalog[pid])
+        for pid, _ in ranked
+    ]
+
+
 @app.get("/api/products", response_model=List[ProductResponse])
 async def list_products(
     limit: int = Query(20, ge=1, le=100),

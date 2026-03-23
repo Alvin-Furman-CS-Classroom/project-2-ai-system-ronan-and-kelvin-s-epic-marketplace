@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Package, Store, Tag, TrendingDown, TrendingUp } from "lucide-react";
-import { fetchProduct, fetchProductDeal } from "../api";
+import { fetchProduct, fetchProductDeal, fetchSimilarProducts } from "../api";
 import type { Product, DealInfo } from "../types";
 import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import Badge from "../components/Badge";
+import ProductCard from "../components/ProductCard";
+import SkeletonCard from "../components/SkeletonCard";
 import Footer from "../components/Footer";
 
 const PLACEHOLDER =
@@ -17,11 +19,16 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
   const [dealInfo, setDealInfo] = useState<DealInfo | null>(null);
+  const [similar, setSimilar] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { addProduct } = useRecentlyViewed();
 
+  // Load product + deal info immediately
   useEffect(() => {
     if (!id) return;
+    setProduct(null);
+    setDealInfo(null);
+    setSimilar([]);
     fetchProduct(id)
       .then((p) => {
         setProduct(p);
@@ -30,6 +37,12 @@ export default function ProductDetailPage() {
       .catch(() => setError("Product not found"));
     fetchProductDeal(id).then(setDealInfo);
   }, [id, addProduct]);
+
+  // Load similar products lazily after the page is already visible
+  useEffect(() => {
+    if (!id) return;
+    fetchSimilarProducts(id, 8).then(setSimilar).catch(() => setSimilar([]));
+  }, [id]);
 
   if (error) {
     return (
@@ -52,10 +65,22 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col bg-[var(--color-surface)]">
         <Navbar />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-brand)] border-t-transparent" />
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 animate-pulse">
+          <div className="h-4 w-32 rounded bg-gray-200 mb-6" />
+          <div className="grid gap-10 md:grid-cols-2">
+            <div className="aspect-square rounded-xl bg-gray-200" />
+            <div className="flex flex-col gap-4">
+              <div className="h-6 w-3/4 rounded bg-gray-200" />
+              <div className="h-4 w-1/2 rounded bg-gray-200" />
+              <div className="h-8 w-32 rounded bg-gray-200" />
+              <div className="h-4 w-full rounded bg-gray-200" />
+              <div className="h-4 w-full rounded bg-gray-200" />
+              <div className="h-4 w-2/3 rounded bg-gray-200" />
+              <div className="mt-auto h-12 w-full rounded-full bg-gray-200" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -236,6 +261,18 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Similar Products — loads lazily after main content */}
+      <section className="mx-auto w-full max-w-6xl px-4 pb-10">
+        <h2 className="mb-4 text-lg font-bold text-[var(--color-text)]">
+          Customers Also Viewed
+        </h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {similar.length > 0
+            ? similar.map((p) => <ProductCard key={p.id} product={p} />)
+            : Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </section>
 
       <Footer />
     </div>

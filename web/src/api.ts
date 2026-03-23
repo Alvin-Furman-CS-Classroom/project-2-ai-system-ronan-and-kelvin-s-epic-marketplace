@@ -66,6 +66,14 @@ export async function fetchRerank(params: RerankParams): Promise<RerankResponse>
   return data;
 }
 
+/** Fetch products similar to the given product (embedding similarity) */
+export async function fetchSimilarProducts(productId: string, limit = 8): Promise<Product[]> {
+  const { data } = await api.get<Product[]>(`/products/${productId}/similar`, {
+    params: { limit },
+  });
+  return data;
+}
+
 /** Fetch deal info for a single product (returns null if not a deal) */
 export async function fetchProductDeal(productId: string): Promise<DealInfo | null> {
   try {
