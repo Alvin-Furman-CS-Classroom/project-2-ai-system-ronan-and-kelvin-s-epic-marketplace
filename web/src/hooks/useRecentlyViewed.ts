@@ -7,17 +7,24 @@ const MAX_ITEMS = 10;
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
+let cachedRaw: string | null = null;
+let cachedItems: Product[] = [];
+
 function emitChange() {
+  cachedRaw = null;
   listeners.forEach((l) => l());
 }
 
 function getSnapshot(): Product[] {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === cachedRaw) return cachedItems;
+  cachedRaw = raw;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    cachedItems = raw ? JSON.parse(raw) : [];
   } catch {
-    return [];
+    cachedItems = [];
   }
+  return cachedItems;
 }
 
 function subscribe(listener: Listener) {
