@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Sparkles, Tag, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Tag, Search, Clock } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
 import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
@@ -9,6 +9,7 @@ import ProductCard from "../components/ProductCard";
 import SkeletonCard from "../components/SkeletonCard";
 import SearchMeta from "../components/SearchMeta";
 import Footer from "../components/Footer";
+import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 
 const PAGE_SIZE = 24;
 
@@ -130,6 +131,7 @@ export default function SearchResultsPage() {
   const totalPages = metadata?.total_pages ?? 1;
   const quInfo: QueryUnderstandingInfo | null | undefined =
     metadata?.query_understanding;
+  const { items: recentlyViewed } = useRecentlyViewed();
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)]">
@@ -282,6 +284,22 @@ export default function SearchResultsPage() {
                 </nav>
               )}
             </>
+          )}
+          {/* Recently Viewed */}
+          {recentlyViewed.length > 0 && (
+            <div className="mt-10 border-t border-[var(--color-border)] pt-6">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-muted)]">
+                <Clock className="h-4 w-4" />
+                Recently Viewed
+              </h3>
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                {recentlyViewed.slice(0, 6).map((product) => (
+                  <div key={product.id} className="w-36 shrink-0">
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </main>
       </div>

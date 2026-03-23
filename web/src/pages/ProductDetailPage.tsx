@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Package, Store, Tag, TrendingDown, TrendingUp } from "lucide-react";
 import { fetchProduct, fetchProductDeal } from "../api";
 import type { Product, DealInfo } from "../types";
+import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import Navbar from "../components/Navbar";
 import StarRating from "../components/StarRating";
 import Badge from "../components/Badge";
@@ -17,14 +18,18 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [dealInfo, setDealInfo] = useState<DealInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { addProduct } = useRecentlyViewed();
 
   useEffect(() => {
     if (!id) return;
     fetchProduct(id)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        addProduct(p);
+      })
       .catch(() => setError("Product not found"));
     fetchProductDeal(id).then(setDealInfo);
-  }, [id]);
+  }, [id, addProduct]);
 
   if (error) {
     return (

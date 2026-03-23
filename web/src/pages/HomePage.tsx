@@ -10,9 +10,11 @@ import {
   TrendingUp,
   Flame,
   GitCompare,
+  Clock,
 } from "lucide-react";
 import { fetchCategories, fetchProducts, fetchDeals } from "../api";
 import type { Category, Product, DealProduct } from "../types";
+import { useRecentlyViewed } from "../hooks/useRecentlyViewed";
 import ProductCard from "../components/ProductCard";
 import Footer from "../components/Footer";
 
@@ -33,6 +35,7 @@ export default function HomePage() {
   const [deals, setDeals] = useState<DealProduct[]>([]);
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
+  const { items: recentlyViewed } = useRecentlyViewed();
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
@@ -94,6 +97,23 @@ export default function HomePage() {
           </form>
         </div>
       </section>
+
+      {/* ---- Recently Viewed ---- */}
+      {recentlyViewed.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pt-10">
+          <h2 className="mb-6 text-xl font-bold flex items-center gap-2">
+            <Clock size={20} className="text-[var(--color-brand)]" />
+            Recently Viewed
+          </h2>
+          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+            {recentlyViewed.map((product) => (
+              <div key={product.id} className="w-44 shrink-0">
+                <ProductCard product={product} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ---- Category Tiles ---- */}
       <section className="mx-auto max-w-7xl px-4 py-10">
