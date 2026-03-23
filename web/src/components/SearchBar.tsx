@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 
 interface Props {
   initialQuery?: string;
@@ -10,12 +10,26 @@ interface Props {
 export default function SearchBar({ initialQuery = "", compact = false }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Keep the input in sync when the URL-driven query changes
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const trimmed = query.trim();
     const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
-    navigate(`/search?${params.toString()}`);
+    if (trimmed) params.set("q", trimmed);
+
+    const target = `/search?${params.toString()}`;
+    if (location.pathname === "/search") {
+      // Already on /search — replace so the URL updates and useSearchParams fires
+      navigate(target, { replace: true });
+    } else {
+      navigate(target);
+    }
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, X } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
@@ -55,6 +55,12 @@ export default function SearchResultsPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Keep filters state in sync when the URL changes externally
+  // (e.g. Navbar search bar navigates to a new ?q=)
+  useEffect(() => {
+    setFilters(filtersFromURL());
+  }, [searchParams, filtersFromURL]);
+
   // Load categories once
   useEffect(() => {
     fetchCategories()
@@ -62,17 +68,21 @@ export default function SearchResultsPage() {
       .catch(console.error);
   }, []);
 
-  // Sync filters → URL
+  // Sync filters → URL (only when filters change via sidebar/pagination)
+  const syncRef = useRef(false);
   useEffect(() => {
+    // Skip the first render — filters already match the URL
+    if (!syncRef.current) {
+      syncRef.current = true;
+      return;
+    }
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters)) {
       if (v !== undefined && v !== null && v !== "") {
         params.set(k, String(v));
       }
     }
-    // Remove page=1 from URL to keep it clean
     if (params.get("page") === "1") params.delete("page");
-    // Remove default page_size
     params.delete("page_size");
     setSearchParams(params, { replace: true });
   }, [filters, setSearchParams]);
@@ -80,6 +90,7 @@ export default function SearchResultsPage() {
   // Fetch products whenever URL params change
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     const current = filtersFromURL();
 
     searchProducts(current)
