@@ -16,6 +16,13 @@ export interface Product {
   features: string[] | null;
 }
 
+/** Module 3 query understanding info attached to search results */
+export interface QueryUnderstandingInfo {
+  keywords: [string, number][];
+  inferred_category: string | null;
+  confidence: number;
+}
+
 export interface SearchMetadata {
   strategy: string;
   total_scanned: number;
@@ -25,6 +32,7 @@ export interface SearchMetadata {
   page: number;
   page_size: number;
   total_pages: number;
+  query_understanding?: QueryUnderstandingInfo | null;
 }
 
 export interface SearchResponse {
@@ -105,4 +113,14 @@ export interface RerankParams {
   rerank_strategy?: string;
   max_results?: number;
   k?: number;
+}
+
+/** Response from GET /api/query-understand */
+export interface QueryUnderstandResponse {
+  query: string;
+  keywords: [string, number][];
+  embedding_shape: number[];
+  embedding_norm: number;
+  inferred_category: string | null;
+  confidence: number;
 }

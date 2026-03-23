@@ -69,17 +69,28 @@ Example: `RankedResult(ranked_candidates=[("p89", 0.73), ("p12", 0.70)], strateg
 
 **Tests:** Unit tests for scoring logic (`test_scorer.py`) and ranker behaviour (`test_ranker.py`); integration test with Module 1 candidate output
 
-### Module 3: Query Understanding (NLP)
+### Module 3: Query Understanding (NLP before LLMs)
 
 **Inputs:** `query_text` (free-text user query)  
-Example: `"handmade ceramic mug"`
+Example: `"bluetooth headphones for running"`
 
-**Outputs:** `keywords`, `query_embedding`, inferred category  
-Example: `keywords=["handmade","ceramic","mug"], inferred_category="home/kitchen"`
+**Outputs:** `QueryResult` dataclass with `keywords` (ranked TF-IDF terms), `query_embedding` (100-d Word2Vec average), `inferred_category` (Logistic Regression prediction), `confidence` (classifier probability)  
+Example: `QueryResult(keywords=[("bluetooth", 0.72), ("headphones", 0.69)], query_embedding=array(shape=(100,)), inferred_category="Electronics", confidence=0.91)`
 
-**Dependencies:** NLP unit
+**Pipeline components:**
+- `tokenizer.py` — Lowercase, punctuation removal, NLTK stopword filtering, n-gram extraction
+- `keywords.py` — TF-IDF vectorizer fitted on product corpus, extracts top-k query keywords by score
+- `embeddings.py` — Custom Word2Vec trained on product text (skip-gram, 100-d), optional GloVe loader, cosine similarity ranking
+- `category_inference.py` — TF-IDF + Logistic Regression classifier trained on product text → category
+- `query_understanding.py` — Orchestrator combining all components into a single `understand(query)` call
 
-**Tests:** Unit tests for keyword extraction and embedding shape; integration test feeding Module 2
+**API integration:**
+- `/api/search?q=...` — When `q` is provided, Module 3 infers category (used if user didn't pick one), then re-ranks candidates by embedding cosine similarity
+- `/api/query-understand?q=...` — Debug endpoint returning raw NLP pipeline output
+
+**Dependencies:** NLP unit (NLTK tokenization, TF-IDF, Word2Vec, Logistic Regression)
+
+**Tests:** 74 tests — tokenizer (19), keywords (12), embeddings (22), category inference (9), orchestrator (8), integration with Modules 1-2 (4)
 
 ### Module 4: Learning-to-Rank (Supervised Learning)
 
@@ -131,6 +142,10 @@ pip install -r requirements.txt
 
 **Dependencies:**
 - `pytest>=7.0.0` — Testing framework
+- `nltk>=3.8.0` — Tokenization, stopwords (Module 3)
+- `gensim>=4.3.0` — Word2Vec embeddings (Module 3)
+- `numpy>=1.24.0` — Vector math (Module 3)
+- `scikit-learn>=1.3.0` — TF-IDF, Logistic Regression (Module 3)
 
 ## Data Source
 
@@ -196,6 +211,43 @@ print(f'Strategy: {ranked.strategy}  Iterations: {ranked.iterations}  NDCG: {ran
 for pid, score in ranked:
     print(f'  {pid}: {score:.4f}')
 "
+
+# Run Module 3: Query Understanding example
+python -c "
+from src.module3 import KeywordExtractor, ProductEmbedder, EMBEDDING_DIM
+from src.module3.tokenizer import tokenize, extract_ngrams
+
+# Tokenize a query
+tokens = tokenize('bluetooth headphones for running')
+print(f'Tokens: {tokens}')
+print(f'Bigrams: {extract_ngrams(tokens)}')
+
+# Keyword extraction from a small corpus
+corpus = [
+    'wireless bluetooth headphones noise cancelling',
+    'running shoes lightweight breathable mesh',
+    'portable bluetooth speaker waterproof outdoor',
+]
+kw = KeywordExtractor(corpus)
+keywords = kw.extract('bluetooth headphones for running')
+print(f'Keywords: {keywords}')
+
+# Word embeddings and similarity
+emb = ProductEmbedder(corpus)
+vec = emb.embed_query('bluetooth headphones')
+print(f'Embedding shape: {vec.shape}  (dim={EMBEDDING_DIM})')
+sim = emb.similarity('bluetooth headphones', 'wireless bluetooth speaker')
+print(f'Similarity: {sim:.4f}')
+
+# Rank products by relevance
+ranked = emb.rank_by_similarity('bluetooth headphones', {
+    'headphones': 'wireless bluetooth headphones noise cancelling',
+    'shoes': 'running shoes lightweight breathable mesh',
+    'speaker': 'portable bluetooth speaker waterproof outdoor',
+})
+for pid, score in ranked:
+    print(f'  {pid}: {score:.4f}')
+"
 ```
 
 ## Testing
@@ -214,6 +266,12 @@ pytest unit_tests/module1/ -v
 # Run Module 2 tests only
 pytest unit_tests/module2/ -v
 
+# Run Module 3 tests only
+pytest unit_tests/module3/ -v
+
+# Run integration tests
+pytest integration_tests/ -v
+
 # Run with coverage (optional, requires pytest-cov)
 pytest unit_tests/ -v --cov=src
 ```
@@ -226,7 +284,7 @@ pytest unit_tests/ -v --cov=src
 | ---------- | ---- | ---------------- | ------ | -------- |
 | 1 | Feb 11 | Module 1 | Complete | 182 tests (unit + integration), 4 search strategies over category tree, typed `SearchResult`, custom exceptions, structured logging, category index, BFS/DFS pruning — see [Evidence of Usage](#evidence-of-usage) |
 | 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
-| 3 | Mar 19 | Modules 1-3 |  |  |
+| 3 | Mar 19 | Modules 1-3 | Complete | 397 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), `/api/search?q=` wired, `/api/query-understand` debug endpoint, inferred category chip in frontend |
 | 4 | Apr 2 | Modules 1-4 |  |  |
 
 ## Evidence of Usage
@@ -275,7 +333,7 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-327 passed in 4.45s
+397 passed in 2.60s
 ```
 
 | Suite | Location | Count | Focus |
@@ -292,6 +350,54 @@ $ pytest --tb=no -q
 | Module 2 Optimizer | `unit_tests/module2/test_optimizer.py` | 17 | Convergence, temperature, cooling rate, HC vs SA |
 | Integration Module 1 | `integration_tests/module1/test_module1_integration.py` | 9 | End-to-end pipeline, recall vs brute-force |
 | Integration Module 2 | `integration_tests/module2/test_module2_integration.py` | 12 | Search→rerank pipeline, strategy agreement, NDCG, category targeting |
+| Tokenizer | `unit_tests/module3/test_tokenizer.py` | 19 | Tokenization, stopwords, n-grams, punctuation, unicode, edge cases |
+| Keywords | `unit_tests/module3/test_keywords.py` | 12 | TF-IDF extraction, ranking, OOV handling, deduplication |
+| Embeddings | `unit_tests/module3/test_embeddings.py` | 22 | Embedding shape, dtype, cosine similarity, ranking, zero vectors |
+| Category Inference | `unit_tests/module3/test_category_inference.py` | 9 | Classifier accuracy, confidence range, validation, empty queries |
+| Query Understanding | `unit_tests/module3/test_query_understanding.py` | 8 | End-to-end pipeline, QueryResult fields, search_by_text |
+| Integration Module 3 | `integration_tests/module3/test_module3_integration.py` | 4 | Full pipeline, category feeds Module 2, text relevance ranking |
+
+## Checkpoint 3 Reflection
+
+Checkpoint 3 delivers Module 3 — Query Understanding — an NLP pipeline that
+transforms free-text search queries into structured signals (keywords, embeddings,
+and inferred categories) using pre-LLM techniques.
+
+**What changed from the initial plan:**
+
+1. **Word2Vec over GloVe as default** — The plan called for loading pre-trained
+   GloVe 100d vectors (~347MB). We made Word2Vec the default because it trains
+   on the actual product corpus (learning domain-specific relationships like
+   "bluetooth" ↔ "wireless") and avoids a large download. GloVe is still
+   supported as an optional fallback via `use_glove=True`.
+
+2. **TF-IDF keyword extraction** — Instead of a simple "keep all non-stopword
+   tokens" approach, we fit a TF-IDF vectorizer on the full product corpus at
+   startup. This means query keywords are scored by how discriminative they are
+   across products, not just by their presence. Terms like "wireless" (common)
+   score lower than "ergonomic" (specific).
+
+3. **Category auto-inference in search** — The `/api/search` endpoint now uses
+   Module 3's Logistic Regression classifier to automatically infer a product
+   category when the user types a query but doesn't select a category. The
+   inferred category is used to narrow results (confidence threshold ≥ 40%),
+   and shown as a purple chip in the UI so the user knows what happened.
+
+4. **Embedding-based re-ranking** — When a text query is provided, Module 1
+   still finds candidates via filter matching, but Module 3 then re-ranks
+   those candidates by cosine similarity between the query embedding and each
+   product's text embedding. This means "bluetooth headphones" surfaces
+   headphone products even within a large electronics category.
+
+5. **Team task division** — Module 3 was split between two developers with zero
+   file overlap. Kelvin built the NLP core (tokenizer, keywords, embeddings)
+   and Ronan built the category inference, orchestrator, and integration tests.
+   Clear interface contracts ensured both halves snapped together on first merge.
+
+6. **Test expansion** — 397 tests (up from 327 at Checkpoint 2) now cover
+   tokenization edge cases, TF-IDF scoring, embedding shapes and similarity,
+   category classifier accuracy, end-to-end orchestration, and Module 3 feeding
+   into Modules 1-2.
 
 ## Checkpoint 2 Reflection
 

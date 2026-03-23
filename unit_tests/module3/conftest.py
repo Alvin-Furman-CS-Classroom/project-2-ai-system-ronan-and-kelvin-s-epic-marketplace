@@ -9,18 +9,14 @@ import nltk
 import pytest
 
 # Ensure NLTK data is available for tokenizer
-try:
-    nltk.data.find("corpora/stopwords")
-except LookupError:
-    nltk.download("stopwords", quiet=True)
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt", quiet=True)
-try:
-    nltk.data.find("tokenizers/punkt_tab")
-except LookupError:
-    nltk.download("punkt_tab", quiet=True)
+for resource, name in [
+    ("corpora/stopwords", "stopwords"),
+    ("tokenizers/punkt", "punkt"),
+]:
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        nltk.download(name, quiet=True)
 
 from src.module3.category_inference import CategoryClassifier
 from src.module3.embeddings import ProductEmbedder

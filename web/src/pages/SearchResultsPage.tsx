@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, X } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
-import type { Category, Product, SearchMetadata, SearchParams } from "../types";
+import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
 import FilterSidebar from "../components/FilterSidebar";
 import ProductCard from "../components/ProductCard";
@@ -116,6 +116,8 @@ export default function SearchResultsPage() {
   const currentPage = filters.page ?? 1;
   const totalPages = metadata?.total_pages ?? 1;
   const queryText = filters.q || filters.category || "All Products";
+  const quInfo: QueryUnderstandingInfo | null | undefined =
+    metadata?.query_understanding;
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)]">
@@ -136,10 +138,41 @@ export default function SearchResultsPage() {
           {/* Header */}
           <div className="mb-4">
             <h1 className="text-2xl font-bold text-[var(--color-text)]">
-              {queryText}
+              {filters.q
+                ? `Results for "${filters.q}"`
+                : filters.category || "All Products"}
             </h1>
             {metadata && <div className="mt-2"><SearchMeta metadata={metadata} /></div>}
           </div>
+
+          {/* Module 3: Query Understanding Chips */}
+          {quInfo && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {quInfo.inferred_category && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-sm font-medium text-purple-800">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Category: {quInfo.inferred_category}
+                  <span className="ml-0.5 text-xs text-purple-500">
+                    {(quInfo.confidence * 100).toFixed(0)}%
+                  </span>
+                </span>
+              )}
+              {quInfo.keywords.slice(0, 5).map(([kw, score]) => (
+                <span
+                  key={kw}
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                >
+                  <Tag className="h-3 w-3" />
+                  {kw}
+                  {score > 0 && (
+                    <span className="text-blue-400">
+                      {score.toFixed(2)}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Product Grid */}
           {loading ? (

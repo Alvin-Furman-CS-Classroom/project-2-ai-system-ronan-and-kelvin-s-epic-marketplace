@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import axios from "axios";
-import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse } from "./types";
+import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse, QueryUnderstandResponse } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -74,4 +74,12 @@ export async function fetchProductDeal(productId: string): Promise<DealInfo | nu
   } catch {
     return null;
   }
+}
+
+/** Module 3: analyze a query and return NLP pipeline results */
+export async function fetchQueryUnderstand(q: string): Promise<QueryUnderstandResponse> {
+  const { data } = await api.get<QueryUnderstandResponse>("/query-understand", {
+    params: { q },
+  });
+  return data;
 }

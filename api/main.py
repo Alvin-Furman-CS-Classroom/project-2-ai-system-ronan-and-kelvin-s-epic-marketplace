@@ -1,8 +1,8 @@
 """
 Epic Marketplace API — FastAPI wrapper for the AI search modules.
 
-Exposes Module 1 (Candidate Retrieval) and Module 2 (Heuristic Re-ranking)
-as REST endpoints.  New modules will add endpoints as they are completed.
+Exposes Module 1 (Candidate Retrieval), Module 2 (Heuristic Re-ranking),
+and Module 3 (Query Understanding) as REST endpoints.
 """
 
 import asyncio
@@ -34,6 +34,7 @@ from src.module1 import (
 )
 from src.module2 import HeuristicRanker, RankedResult, ScoringConfig, DealFinder
 from src.module2.ranker import RANKING_STRATEGIES
+from src.module3.query_understanding import QueryUnderstanding, QueryResult
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ catalog: Optional[ProductCatalog] = None
 retrieval: Optional[CandidateRetrieval] = None
 ranker: Optional[HeuristicRanker] = None
 deal_finder: Optional[DealFinder] = None
+query_understanding: Optional[QueryUnderstanding] = None
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +84,14 @@ class ProductResponse(BaseModel):
         )
 
 
+class QueryUnderstandingInfo(BaseModel):
+    """Module 3 query understanding results embedded in search response."""
+
+    keywords: List[List] = Field(default_factory=list)
+    inferred_category: Optional[str] = None
+    confidence: float = 0.0
+
+
 class SearchMetadata(BaseModel):
     """Search performance & strategy metadata."""
 
@@ -89,10 +99,11 @@ class SearchMetadata(BaseModel):
     total_scanned: int
     elapsed_ms: float
     count: int
-    total: int          # total matching results (before pagination)
-    page: int           # current page (1-based)
-    page_size: int      # items per page
-    total_pages: int    # total number of pages
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    query_understanding: Optional[QueryUnderstandingInfo] = None
 
 
 class SearchResponse(BaseModel):
@@ -198,13 +209,23 @@ def _load_catalog() -> ProductCatalog:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global catalog, retrieval, ranker, deal_finder
+    global catalog, retrieval, ranker, deal_finder, query_understanding
     catalog = _load_catalog()
     retrieval = CandidateRetrieval(catalog)
     ranker = HeuristicRanker(catalog)
     deal_finder = DealFinder(catalog)
-    logger.info("API ready — %d products indexed, %d deals found",
-                len(catalog), len(deal_finder.get_deals(limit=99999)))
+
+    # Module 3: build NLP corpus from catalog and train models
+    corpus_texts = [
+        f"{p.title} {p.description or ''}" for p in catalog
+    ]
+    corpus_labels = [p.category for p in catalog]
+    query_understanding = QueryUnderstanding(corpus_texts, corpus_labels)
+    logger.info(
+        "API ready — %d products indexed, %d deals, Module 3 NLP loaded",
+        len(catalog),
+        len(deal_finder.get_deals(limit=99999)),
+    )
     yield
 
 
@@ -290,15 +311,32 @@ async def search(
     """
     Search for products matching filters.
 
-    Returns matching products with search metadata (strategy, timing, etc.).
+    When `q` is provided, Module 3 (Query Understanding) extracts keywords,
+    infers a category, and re-ranks candidates by embedding similarity.
     """
     if not retrieval or not catalog:
         raise HTTPException(503, "Catalog not loaded")
 
+    qu_info: Optional[QueryUnderstandingInfo] = None
+
+    # --- Module 3: understand the query if provided ---
+    effective_category = category
+    if q and q.strip() and query_understanding:
+        qr: QueryResult = query_understanding.understand(q)
+        qu_info = QueryUnderstandingInfo(
+            keywords=[[kw, round(sc, 4)] for kw, sc in qr.keywords],
+            inferred_category=qr.inferred_category,
+            confidence=round(qr.confidence, 4),
+        )
+        # Use inferred category when user didn't pick one explicitly
+        CATEGORY_CONFIDENCE_THRESHOLD = 0.4
+        if not category and qr.inferred_category and qr.confidence >= CATEGORY_CONFIDENCE_THRESHOLD:
+            effective_category = qr.inferred_category
+
     filters = SearchFilters(
         price_min=price_min,
         price_max=price_max,
-        category=category,
+        category=effective_category,
         min_seller_rating=min_rating,
         store=store,
         sort_by=sort_by,
@@ -306,12 +344,22 @@ async def search(
 
     result: SearchResult = retrieval.search(filters, strategy=strategy)
 
-    # Paginate the candidate IDs
-    total = result.count
+    # --- Module 3: re-rank by text relevance when q is present ---
+    candidate_ids = result.candidate_ids
+    if q and q.strip() and query_understanding and candidate_ids:
+        texts = {
+            pid: f"{catalog[pid].title} {catalog[pid].description or ''}"
+            for pid in candidate_ids
+        }
+        ranked_pairs = query_understanding.search_by_text(q, texts, top_k=len(candidate_ids))
+        candidate_ids = [pid for pid, _ in ranked_pairs]
+
+    # Paginate
+    total = len(candidate_ids)
     total_pages = max(1, (total + page_size - 1) // page_size)
     start = (page - 1) * page_size
     end = start + page_size
-    page_ids = result.candidate_ids[start:end]
+    page_ids = candidate_ids[start:end]
 
     products = [
         ProductResponse.from_product(catalog[pid])
@@ -329,6 +377,7 @@ async def search(
             page=page,
             page_size=page_size,
             total_pages=total_pages,
+            query_understanding=qu_info,
         ),
     )
 
@@ -454,4 +503,30 @@ async def get_product_deal(product_id: str):
         "price_vs_avg": info.price_vs_avg,
         "rating_vs_avg": info.rating_vs_avg,
         "category_avg_price": info.category_avg_price,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Module 3: Query Understanding debug endpoint
+# ---------------------------------------------------------------------------
+@app.get("/api/query-understand")
+async def query_understand(
+    q: str = Query(..., description="Free-text query to analyze"),
+):
+    """
+    Debug endpoint: run Module 3 NLP pipeline on a query and return
+    keywords, embedding shape, inferred category, and confidence.
+    """
+    if not query_understanding:
+        raise HTTPException(503, "Query understanding not loaded")
+
+    qr: QueryResult = query_understanding.understand(q)
+
+    return {
+        "query": q,
+        "keywords": [[kw, round(sc, 4)] for kw, sc in qr.keywords],
+        "embedding_shape": list(qr.query_embedding.shape),
+        "embedding_norm": round(float(qr.query_embedding.dot(qr.query_embedding) ** 0.5), 4),
+        "inferred_category": qr.inferred_category,
+        "confidence": round(qr.confidence, 4),
     }
