@@ -19,6 +19,7 @@ Components (Ronan — Category Inference + Orchestrator):
 from .category_inference import CategoryClassifier
 from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
+from .query_expansion import QueryExpander
 from .query_understanding import QueryResult, QueryUnderstanding
 from .spell_correction import SpellCorrector
 from .tokenizer import extract_ngrams, tokenize
@@ -36,6 +37,8 @@ __all__ = [
     "CategoryClassifier",
     # Spell correction
     "SpellCorrector",
+    # Query expansion
+    "QueryExpander",
     # Orchestrator
     "QueryUnderstanding",
     "QueryResult",

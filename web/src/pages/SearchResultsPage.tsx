@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, X, Search } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Sparkles, Tag, Search, Zap } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
 import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
@@ -127,7 +127,6 @@ export default function SearchResultsPage() {
 
   const currentPage = filters.page ?? 1;
   const totalPages = metadata?.total_pages ?? 1;
-  const queryText = filters.q || filters.category || "All Products";
   const quInfo: QueryUnderstandingInfo | null | undefined =
     metadata?.query_understanding;
 
@@ -159,12 +158,12 @@ export default function SearchResultsPage() {
 
           {/* Module 3: "Did you mean?" spell correction */}
           {quInfo?.corrected_query && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
-              <Search className="h-4 w-4 shrink-0 text-amber-600" />
-              <span className="text-sm text-amber-800">
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5">
+              <Search className="h-4 w-4 shrink-0 text-blue-600" />
+              <span className="text-sm text-blue-800">
                 Did you mean:{" "}
                 <button
-                  className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2 hover:text-amber-700"
+                  className="font-semibold text-blue-900 underline decoration-blue-400 underline-offset-2 hover:text-blue-700"
                   onClick={() => {
                     const params = new URLSearchParams(searchParams);
                     params.set("q", quInfo.corrected_query!);
@@ -202,6 +201,18 @@ export default function SearchResultsPage() {
                       {score.toFixed(2)}
                     </span>
                   )}
+                </span>
+              ))}
+              {quInfo.expanded_terms?.slice(0, 5).map(([term, sim]) => (
+                <span
+                  key={term}
+                  className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
+                >
+                  <Zap className="h-3 w-3" />
+                  {term}
+                  <span className="text-green-400">
+                    {sim.toFixed(2)}
+                  </span>
                 </span>
               ))}
             </div>

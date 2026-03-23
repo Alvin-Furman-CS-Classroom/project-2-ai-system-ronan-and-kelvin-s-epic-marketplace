@@ -21,6 +21,7 @@ for resource, name in [
 from src.module3.category_inference import CategoryClassifier
 from src.module3.embeddings import ProductEmbedder
 from src.module3.keywords import KeywordExtractor
+from src.module3.query_expansion import QueryExpander
 from src.module3.query_understanding import QueryUnderstanding
 
 SAMPLE_CORPUS = [
@@ -83,6 +84,12 @@ def product_embedder(sample_corpus) -> ProductEmbedder:
 def category_classifier(sample_corpus, sample_labels) -> CategoryClassifier:
     """CategoryClassifier trained on the sample corpus."""
     return CategoryClassifier(sample_corpus, sample_labels)
+
+
+@pytest.fixture
+def query_expander(product_embedder) -> QueryExpander:
+    """QueryExpander bound to the sample embedder's vectors."""
+    return QueryExpander(product_embedder.vectors)
 
 
 @pytest.fixture
