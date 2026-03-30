@@ -1,12 +1,48 @@
 """
-Integration tests: Module 4 LTR on top of Modules 1–3.
-
-Replace placeholders when pipeline and scoring are implemented.
+Integration tests: Module 4 LTR with catalog-like products.
 """
+
+from src.module1.catalog import Product, ProductCatalog
+from src.module4.pipeline import LearningToRankPipeline
 
 
 def test_module4_package_importable():
     import src.module4 as m4
 
     assert m4.__doc__
-    assert "LearningToRankError" in m4.__all__
+    assert "QualityValueRanker" in m4.__all__
+
+
+def test_pipeline_with_small_catalog():
+    """End-to-end: build products → fit_rank with price band from filters."""
+    products = [
+        Product(
+            id="p1",
+            title="USB Cable",
+            price=12.0,
+            category="Electronics",
+            seller_rating=4.1,
+            store="A",
+            description="x" * 100,
+            rating_number=500,
+            features=["a", "b"],
+        ),
+        Product(
+            id="p2",
+            title="USB-C Hub",
+            price=35.0,
+            category="Electronics",
+            seller_rating=4.8,
+            store="B",
+            description="x" * 400,
+            rating_number=6000,
+            features=["a", "b", "c", "d"],
+        ),
+    ]
+    catalog = ProductCatalog(products)
+    pipe = LearningToRankPipeline()
+    # User filter: $10–$40 — same band for feature scaling
+    ranked = pipe.fit_rank(list(catalog), price_band=(10.0, 40.0), top_k=2)
+    # Hub has stronger rating, reviews, and listing depth — should rank first
+    assert ranked[0][0] == "p2"
+    assert len(ranked) == 2
