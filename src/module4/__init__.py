@@ -24,6 +24,8 @@ from .features import (
 from .model import QualityValueRanker
 from .pipeline import LearningToRankPipeline
 from .query_features import (
+    COMBINED_FEATURE_DIM,
+    COMBINED_FEATURE_NAMES,
     QUERY_FEATURE_DIM,
     QUERY_FEATURE_NAMES,
     compute_query_product_features,
@@ -43,6 +45,8 @@ __all__ = [
     "LearningToRankPipeline",
     "QUERY_FEATURE_DIM",
     "QUERY_FEATURE_NAMES",
+    "COMBINED_FEATURE_DIM",
+    "COMBINED_FEATURE_NAMES",
     "compute_query_product_features",
     "compute_combined_features",
     "TrainingDataGenerator",

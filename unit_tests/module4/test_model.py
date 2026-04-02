@@ -58,3 +58,53 @@ def test_explicit_labels_fit():
     # Positive label should not always be last — but class 1 should tend to score higher
     top_id = ranked[0][0]
     assert top_id in ("a", "b")
+
+
+def test_use_feature_scaling_disabled_still_trains():
+    """Optional path: raw features + LR (previous behavior)."""
+    products = [
+        Product(id="a", title="a", price=10.0, category="c", seller_rating=3.0, store="s"),
+        Product(id="b", title="b", price=20.0, category="c", seller_rating=5.0, store="s"),
+    ]
+    m = QualityValueRanker(use_feature_scaling=False, C=1.0, max_iter=2000)
+    m.fit(products, labels=np.array([0, 1]))
+    assert m.is_fitted
+    ranked = m.score(products)
+    assert len(ranked) == 2
+
+
+def test_fit_from_precomputed_X_matches_training_data_width():
+    """Partner path: TrainingDataGenerator-style (n, 11) matrix."""
+    from src.module4.query_features import COMBINED_FEATURE_DIM
+
+    rng = np.random.default_rng(0)
+    X = rng.random((40, COMBINED_FEATURE_DIM))
+    y = np.concatenate([np.zeros(20), np.ones(20)]).astype(int)
+    m = QualityValueRanker()
+    m.fit(X=X, labels=y)
+    assert m.n_features == COMBINED_FEATURE_DIM
+    assert len(m.coef_as_dict()) == COMBINED_FEATURE_DIM
+
+
+def test_combined_model_requires_query_context_at_score(quality_products):
+    from src.module3.query_understanding import QueryResult
+    from src.module4.query_features import COMBINED_FEATURE_DIM
+
+    class _Emb:
+        def embed_text(self, text: str) -> np.ndarray:
+            return np.ones(100, dtype=np.float32)
+
+    qr = QueryResult(
+        keywords=[("bluetooth", 0.5)],
+        query_embedding=np.ones(100, dtype=np.float32),
+        inferred_category="Electronics",
+        confidence=0.9,
+    )
+    emb = _Emb()
+    m = QualityValueRanker()
+    m.fit(quality_products, query_result=qr, embedder=emb)
+    assert m.n_features == COMBINED_FEATURE_DIM
+    with pytest.raises(ValueError, match="query_result and embedder"):
+        m.score(quality_products)
+    ranked = m.score(quality_products, query_result=qr, embedder=emb)
+    assert len(ranked) == len(quality_products)

@@ -39,3 +39,29 @@ def test_pipeline_accepts_numpy_labels(quality_products):
     y = np.array([1, 0, 1, 0, 1], dtype=int)
     pipe.fit(quality_products, labels=y, price_band=(10.0, 130.0))
     assert pipe.ranker.is_fitted
+
+
+def test_pipeline_fit_X_then_rank_with_partner_context(quality_products):
+    """Uses TrainingDataGenerator-sized matrix, then ranks with Module 3 context."""
+    from src.module3.query_understanding import QueryResult
+    from src.module4.query_features import compute_combined_features
+
+    class _Emb:
+        def embed_text(self, text: str) -> np.ndarray:
+            return np.full(100, 0.5, dtype=np.float32)
+
+    qr = QueryResult(
+        keywords=[("bluetooth", 0.6)],
+        query_embedding=np.full(100, 0.5, dtype=np.float32),
+        inferred_category="Electronics",
+        confidence=0.8,
+    )
+    emb = _Emb()
+    X = compute_combined_features(quality_products, qr, emb, price_band=(10.0, 130.0))
+    y = np.array([0, 1, 0, 1, 1], dtype=int)
+
+    pipe = LearningToRankPipeline()
+    pipe.fit(X=X, labels=y)
+    assert pipe.ranker.n_features == X.shape[1]
+    out = pipe.rank(quality_products, query_result=qr, embedder=emb, price_band=(10.0, 130.0))
+    assert len(out) == len(quality_products)

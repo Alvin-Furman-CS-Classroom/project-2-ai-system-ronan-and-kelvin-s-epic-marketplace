@@ -23,6 +23,7 @@ from src.module3.embeddings import ProductEmbedder, _cosine_similarity
 from src.module3.query_understanding import QueryResult
 from src.module3.tokenizer import tokenize
 from src.module4.exceptions import FeatureConstructionError
+from src.module4.features import FEATURE_DIM, FEATURE_NAMES
 
 QUERY_FEATURE_NAMES: Tuple[str, ...] = (
     "cosine_similarity",
@@ -32,6 +33,12 @@ QUERY_FEATURE_NAMES: Tuple[str, ...] = (
 )
 
 QUERY_FEATURE_DIM = len(QUERY_FEATURE_NAMES)
+
+# Full LTR vector = product-quality (features.py) ∪ query–product signals (this module)
+COMBINED_FEATURE_NAMES: Tuple[str, ...] = FEATURE_NAMES + QUERY_FEATURE_NAMES
+COMBINED_FEATURE_DIM = len(COMBINED_FEATURE_NAMES)
+
+assert COMBINED_FEATURE_DIM == FEATURE_DIM + QUERY_FEATURE_DIM
 
 
 def _keyword_overlap(keywords: List[Tuple[str, float]], product: Product) -> float:
@@ -107,7 +114,7 @@ def compute_combined_features(
         price_band: Optional price window passed to quality features.
 
     Returns:
-        ``float64`` array of shape ``(len(products), FEATURE_DIM + QUERY_FEATURE_DIM)``.
+        ``float64`` array of shape ``(len(products), COMBINED_FEATURE_DIM)``.
     """
     from src.module4.features import compute_quality_value_features
 

@@ -15,6 +15,7 @@ def test_module4_package_importable():
     assert "QualityValueRanker" in m4.__all__
     assert "TrainingDataGenerator" in m4.__all__
     assert "compute_combined_features" in m4.__all__
+    assert "COMBINED_FEATURE_DIM" in m4.__all__
 
 
 def test_pipeline_with_small_catalog():
