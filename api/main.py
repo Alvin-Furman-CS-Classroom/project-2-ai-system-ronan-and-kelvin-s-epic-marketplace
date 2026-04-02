@@ -2,7 +2,7 @@
 Epic Marketplace API — FastAPI wrapper for the AI search modules.
 
 Exposes Module 1 (Candidate Retrieval), Module 2 (Heuristic Re-ranking),
-and Module 3 (Query Understanding) as REST endpoints.
+Module 3 (Query Understanding), and Module 4 (Learning-to-Rank) as REST endpoints.
 """
 
 import asyncio
@@ -35,6 +35,9 @@ from src.module1 import (
 from src.module2 import HeuristicRanker, RankedResult, ScoringConfig, DealFinder
 from src.module2.ranker import RANKING_STRATEGIES
 from src.module3.query_understanding import QueryUnderstanding, QueryResult
+from src.module3.embeddings import ProductEmbedder
+from src.module4.pipeline import LearningToRankPipeline
+from src.module4.training_data import TrainingDataGenerator
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,6 +50,8 @@ retrieval: Optional[CandidateRetrieval] = None
 ranker: Optional[HeuristicRanker] = None
 deal_finder: Optional[DealFinder] = None
 query_understanding: Optional[QueryUnderstanding] = None
+product_embedder: Optional[ProductEmbedder] = None
+ltr_pipeline: Optional[LearningToRankPipeline] = None
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +216,7 @@ def _load_catalog() -> ProductCatalog:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global catalog, retrieval, ranker, deal_finder, query_understanding
+    global product_embedder, ltr_pipeline
     catalog = _load_catalog()
     retrieval = CandidateRetrieval(catalog)
     ranker = HeuristicRanker(catalog)
@@ -222,8 +228,26 @@ async def lifespan(app: FastAPI):
     ]
     corpus_labels = [p.category for p in catalog]
     query_understanding = QueryUnderstanding(corpus_texts, corpus_labels)
+
+    # Keep a reference to the embedder for Module 4
+    product_embedder = query_understanding._embedder
+
+    # Module 4: train LTR model on synthetic data
+    ltr_pipeline = LearningToRankPipeline()
+    try:
+        gen = TrainingDataGenerator(
+            catalog=catalog,
+            query_understanding=query_understanding,
+            embedder=product_embedder,
+        )
+        X_train, y_train = gen.generate(max_products_per_query=50, seed=42)
+        ltr_pipeline.fit(list(catalog)[:200], labels=list(y_train[:200]))
+        logger.info("Module 4 LTR trained on %d examples", X_train.shape[0])
+    except Exception as exc:
+        logger.warning("Module 4 LTR training skipped: %s", exc)
+
     logger.info(
-        "API ready — %d products indexed, %d deals, Module 3 NLP loaded",
+        "API ready — %d products indexed, %d deals, Module 3 NLP + Module 4 LTR loaded",
         len(catalog),
         len(deal_finder.get_deals(limit=99999)),
     )
@@ -388,6 +412,16 @@ async def search(
         }
         ranked_pairs = query_understanding.search_by_text(q, texts, top_k=len(candidate_ids))
         candidate_ids = [pid for pid, _ in ranked_pairs]
+
+    # --- Module 4: LTR re-rank using combined features ---
+    if ltr_pipeline and ltr_pipeline.ranker.is_fitted and candidate_ids:
+        try:
+            ltr_products = [catalog[pid] for pid in candidate_ids]
+            price_band = (price_min, price_max) if price_min is not None and price_max is not None else None
+            ltr_scored = ltr_pipeline.rank(ltr_products, price_band=price_band)
+            candidate_ids = [pid for pid, _ in ltr_scored]
+        except Exception as exc:
+            logger.warning("Module 4 LTR re-rank skipped: %s", exc)
 
     # Paginate
     total = len(candidate_ids)

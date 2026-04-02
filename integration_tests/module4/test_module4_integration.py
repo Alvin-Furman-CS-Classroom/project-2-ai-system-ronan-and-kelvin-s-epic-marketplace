@@ -2,6 +2,8 @@
 Integration tests: Module 4 LTR with catalog-like products.
 """
 
+import numpy as np
+
 from src.module1.catalog import Product, ProductCatalog
 from src.module4.pipeline import LearningToRankPipeline
 
@@ -11,6 +13,8 @@ def test_module4_package_importable():
 
     assert m4.__doc__
     assert "QualityValueRanker" in m4.__all__
+    assert "TrainingDataGenerator" in m4.__all__
+    assert "compute_combined_features" in m4.__all__
 
 
 def test_pipeline_with_small_catalog():
@@ -41,8 +45,25 @@ def test_pipeline_with_small_catalog():
     ]
     catalog = ProductCatalog(products)
     pipe = LearningToRankPipeline()
-    # User filter: $10–$40 — same band for feature scaling
     ranked = pipe.fit_rank(list(catalog), price_band=(10.0, 40.0), top_k=2)
-    # Hub has stronger rating, reviews, and listing depth — should rank first
     assert ranked[0][0] == "p2"
     assert len(ranked) == 2
+
+
+def test_query_features_importable():
+    from src.module4.query_features import (
+        QUERY_FEATURE_DIM,
+        QUERY_FEATURE_NAMES,
+        compute_query_product_features,
+        compute_combined_features,
+    )
+    assert QUERY_FEATURE_DIM == len(QUERY_FEATURE_NAMES)
+    assert QUERY_FEATURE_DIM == 4
+
+
+def test_training_data_importable():
+    from src.module4.training_data import (
+        SAMPLE_QUERIES,
+        TrainingDataGenerator,
+    )
+    assert len(SAMPLE_QUERIES) >= 10

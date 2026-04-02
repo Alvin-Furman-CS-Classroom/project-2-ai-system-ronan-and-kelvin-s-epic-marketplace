@@ -23,6 +23,13 @@ from .features import (
 )
 from .model import QualityValueRanker
 from .pipeline import LearningToRankPipeline
+from .query_features import (
+    QUERY_FEATURE_DIM,
+    QUERY_FEATURE_NAMES,
+    compute_query_product_features,
+    compute_combined_features,
+)
+from .training_data import TrainingDataGenerator
 
 __all__ = [
     "LearningToRankError",
@@ -34,4 +41,9 @@ __all__ = [
     "compute_quality_value_features",
     "QualityValueRanker",
     "LearningToRankPipeline",
+    "QUERY_FEATURE_DIM",
+    "QUERY_FEATURE_NAMES",
+    "compute_query_product_features",
+    "compute_combined_features",
+    "TrainingDataGenerator",
 ]

@@ -104,7 +104,8 @@ _A timeline showing that each module's prerequisites align with the course sched
 | 1      | Uninformed/Informed Search | Search unit (Weeks 1.5-3) | Checkpoint 1 — Feb 11 |
 | 2      | Advanced Search | Advanced Search unit (Week 4) | Checkpoint 2 — Feb 26 |
 | 3      | NLP before LLMs | NLP unit (Weeks 5.5-7) | Checkpoint 3 — Mar 19 |
-| 4      | Supervised Learning | Intro SL/RL unit (Weeks 7-8.5) | Checkpoint 4 — Apr 2 |
+| 4      | Supervised Learning | Intro SL/RL unit (Weeks 7-8.5) | Checkso what needs to be done for the module to be complete
+point 4 — Apr 2 |
 | 5      | Evaluation Metrics | SL + evaluation metrics (Remaining weeks) | Checkpoint 5 — Apr 16 |
 
 All modules are scheduled after their prerequisite topics are taught, and each checkpoint aligns with the course schedule dates listed for Project 2 (Feb 11, Feb 26, Mar 19, Apr 2, Apr 16).
