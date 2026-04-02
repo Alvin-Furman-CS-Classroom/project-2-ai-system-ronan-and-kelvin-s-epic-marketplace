@@ -106,15 +106,26 @@ Example: `QueryResult(keywords=[("bluetooth", 0.72), ("headphones", 0.69)], quer
 
 ### Module 4: Learning-to-Rank (Supervised Learning)
 
-**Inputs:** `ranked_candidates`, product features, query features, training data  
-Example: `training_label={"p89":1,"p12":0}`
+**Inputs:** Candidate products from Module 1, product features, `QueryResult` from Module 3, optional user `price_band`, training labels (synthetic or explicit)  
+Example: `pipeline.fit_rank(products, price_band=(10.0, 50.0), top_k=24)`
 
-**Outputs:** `final_scores` for each candidate  
-Example: `final_scores=[("p89",0.86),("p12",0.81)]`
+**Outputs:** `List[Tuple[product_id, score]]` sorted descending — final relevance scores in (0, 1)  
+Example: `[("p89", 0.86), ("p12", 0.81), ("p45", 0.73)]`
 
-**Dependencies:** Supervised learning unit; Modules 2-3
+**Pipeline components:**
+- `features.py` — 7 product-quality features: rating_norm, review_strength, description_richness, bullet_richness, price_norm_in_band, value_core, perf_per_dollar_hint. Normalised to [0, 1], price band aware.
+- `query_features.py` — 4 query-product features: cosine_similarity (Word2Vec query vs product embedding), keyword_overlap (TF-IDF keyword fraction in product text), category_match (NLP-inferred vs product category), category_confidence (classifier probability). `compute_combined_features()` horizontally concatenates both into an 11-column matrix.
+- `model.py` — `QualityValueRanker` wrapping scikit-learn Logistic Regression (binary, balanced class weight, lbfgs solver). Supports proxy labels (median split on weighted composite) or explicit binary labels. Falls back to heuristic scoring when unfitted. Exposes `coef_as_dict()` for feature importance interpretability.
+- `pipeline.py` — `LearningToRankPipeline` orchestrating feature extraction + model. Methods: `fit()`, `rank()`, `fit_rank()`. Graceful fallback on insufficient data.
+- `training_data.py` — `TrainingDataGenerator` producing synthetic (X, y) training pairs. Uses 20 representative queries run through Module 3. Relevance labels computed from a weighted composite (30% cosine sim, 25% category match, 15% keyword overlap, 15% rating, 10% reviews, 5% noise) then median-split into binary labels. Deterministic via seed.
+- `exceptions.py` — `LearningToRankError`, `InsufficientTrainingDataError`, `ModelNotFittedError`, `FeatureConstructionError`
 
-**Tests:** Unit tests for model training and scoring; integration test with Modules 2-3
+**API integration:**
+- `/api/search` — After Module 3 re-ranking, Module 4 LTR re-ranks candidates by learned quality-value scores when the model is fitted. Price band from user filters is passed for consistent feature scaling.
+
+**Dependencies:** Supervised learning unit (Logistic Regression); Modules 1-3 (`Product`, `ProductCatalog`, `QueryResult`, `ProductEmbedder`)
+
+**Tests:** 51 tests — exceptions (4), features (5), model (6), pipeline (4), query features (15), training data (13), integration (4)
 
 ### Module 5: Evaluation & Final Output
 
@@ -297,7 +308,7 @@ pytest unit_tests/ -v --cov=src
 | 1 | Feb 11 | Module 1 | Complete | 182 tests (unit + integration), 4 search strategies over category tree, typed `SearchResult`, custom exceptions, structured logging, category index, BFS/DFS pruning — see [Evidence of Usage](#evidence-of-usage) |
 | 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
 | 3 | Mar 19 | Modules 1-3 | Complete | 423 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 22 spell correction + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), spell correction, 256-entry NLP LRU cache, `/api/search?q=`, `/api/query-understand`, `/api/autocomplete`, `/api/products/{id}/similar`, inferred category chip, "Did you mean?" banner, autocomplete typeahead, search history + trending, recently viewed, customers also viewed (similar products), skeleton loading |
-| 4 | Apr 2 | Modules 1-4 |  |  |
+| 4 | Apr 2 | Modules 1-4 | Complete | 474 tests (unit + integration). Module 4: 4 exception + 5 feature + 6 model + 4 pipeline + 15 query feature + 13 training data + 4 integration tests. LTR pipeline (product-quality features + query-product features → Logistic Regression classifier), synthetic training data generator, `/api/search` Module 4 re-ranking, `coef_as_dict()` interpretability |
 
 ## Evidence of Usage
 
@@ -345,7 +356,7 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-423 passed in 2.60s
+474 passed in 5.13s
 ```
 
 | Suite | Location | Count | Focus |
@@ -369,8 +380,64 @@ $ pytest --tb=no -q
 | Query Understanding | `unit_tests/module3/test_query_understanding.py` | 8 | End-to-end pipeline, QueryResult fields, search_by_text |
 | Integration Module 3 | `integration_tests/module3/test_module3_integration.py` | 4 | Full pipeline, category feeds Module 2, text relevance ranking |
 | Spell Correction | `unit_tests/module3/test_spell_correction.py` | 22 | Levenshtein distance, token correction, query correction, edge cases |
+| LTR Exceptions | `unit_tests/module4/test_exceptions.py` | 4 | Exception hierarchy, EpicMarketplaceError inheritance |
+| LTR Features | `unit_tests/module4/test_features.py` | 5 | Feature dim, shape, bounds, price band normalization |
+| LTR Model | `unit_tests/module4/test_model.py` | 6 | Fit/predict ordering, insufficient samples, single class, heuristic fallback, explicit labels |
+| LTR Pipeline | `unit_tests/module4/test_pipeline.py` | 4 | End-to-end fit_rank, heuristic fallback, graceful degradation, numpy labels |
+| Query Features | `unit_tests/module4/test_query_features.py` | 15 | Keyword overlap, cosine similarity bounds, category match, combined features |
+| Training Data | `unit_tests/module4/test_training_data.py` | 13 | Label generation, binary labels, both classes, determinism, feature dimension |
+| Integration Module 4 | `integration_tests/module4/test_module4_integration.py` | 4 | Package imports, pipeline with catalog, query features, training data |
 
-**Total:** 423 tests
+**Total:** 474 tests
+
+## Checkpoint 4 Reflection
+
+Checkpoint 4 delivers Module 4 — Learning-to-Rank — a supervised classification
+model that replaces hand-tuned heuristic weights with data-driven ranking. The
+module trains a Logistic Regression classifier on product-quality and query-product
+features to produce relevance scores in (0, 1).
+
+**What changed from the initial plan:**
+
+1. **Two-stage feature architecture** — The original plan called for a single feature
+   vector. We split features into two independent files: `features.py` (7 product-quality
+   features by Ronan) and `query_features.py` (4 query-product features by Kelvin).
+   `compute_combined_features()` concatenates both into an 11-column matrix. This
+   let the two developers work in parallel with zero merge conflicts.
+
+2. **Proxy labels via median split** — Without real click data, the model uses a
+   weighted quality composite (rating, reviews, richness, price position) and
+   median-splits it into binary "prefer / don't prefer" labels. This bootstraps
+   training without needing user interaction logs.
+
+3. **Synthetic training data generator** — `TrainingDataGenerator` runs 20
+   representative queries through Module 3, pairs each with sampled products,
+   and computes relevance from a 6-signal weighted composite (cosine similarity,
+   category match, keyword overlap, rating, review strength, noise). The noise
+   term prevents perfect correlation with any single feature so the model learns
+   a meaningful combination.
+
+4. **Query-product features bridge Module 3 into LTR** — Ronan's initial
+   implementation scored products by listing quality alone. Kelvin's
+   `query_features.py` adds cosine similarity (Word2Vec), TF-IDF keyword overlap,
+   NLP category match, and classifier confidence — so the model now answers
+   "which product best matches this query" not just "which is the best listing."
+
+5. **Graceful fallback** — If the model can't train (too few products, single class),
+   the pipeline falls back to deterministic heuristic scores using the same weight
+   vector as the proxy labels. The search API never crashes.
+
+6. **API integration** — Module 4 trains at server startup on synthetic data and
+   re-ranks search results after Module 3's embedding re-rank. The `price_band`
+   from user filters is passed through for consistent feature scaling.
+
+7. **Interpretability** — `coef_as_dict()` exposes the learned Logistic Regression
+   coefficients mapped to human-readable feature names, showing which signals the
+   model weighted most heavily.
+
+8. **Test expansion** — 474 tests (up from 423 at Checkpoint 3). 51 Module 4 tests
+   cover feature construction, model training/scoring, pipeline orchestration,
+   query features, training data generation, and integration with the catalog.
 
 ## Checkpoint 3 Reflection
 
