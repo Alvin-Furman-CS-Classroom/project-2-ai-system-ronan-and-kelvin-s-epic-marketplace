@@ -129,14 +129,22 @@ Example: `[("p89", 0.86), ("p12", 0.81), ("p45", 0.73)]`
 
 ### Module 5: Evaluation & Final Output
 
-**Inputs:** `final_scores`, held-out interaction data
+**Inputs:** `final_scores` from Module 4 (`List[Tuple[str, float]]`), `HeldOutSet` (ground-truth relevance per query derived from review ratings >= 4 stars)  
+Example: `holdout = HeldOutSet({"bluetooth headphones": {"B07ABC", "B08XYZ"}})`
 
-**Outputs:** `top_k_results` with scores plus metrics (Precision@k, NDCG@k)  
-Example: `top_k_results=[{"id":"p89","score":0.86,"price":22.0,"title":"Ceramic Mug"}]`
+**Outputs:** `EvaluationResult` containing a `TopKResult` payload and a metrics dict; `BatchEvaluationResult` for multi-query aggregation  
+Example: `TopKResult(query="headphones", k=10, results=(...), metrics={"precision_at_k": 0.8, "ndcg_at_k": 0.91, ...})`
 
-**Dependencies:** Supervised learning evaluation metrics; Module 4
+**Pipeline components:**
+- `metrics.py` — Pure metric functions: `precision_at_k`, `recall_at_k`, `ndcg_at_k`, `reciprocal_rank`, `average_precision`, `compute_all_metrics`. All operate on ranked ID lists + ground-truth relevant ID sets (standard IR interface).
+- `holdout.py` — `HeldOutSet` dataclass wrapping `{query -> set(relevant_ids)}`. Factory `build_holdout_from_reviews()` derives binary relevance from review ratings. `train_test_split_holdout()` for deterministic query-level splits.
+- `payload.py` — `TopKResult` frozen dataclass and `build_top_k_payload()` assembling JSON-ready results from Module 4 scores + catalog metadata.
+- `pipeline.py` — `EvaluationPipeline` orchestrating Modules 1-4, computing metrics against held-out data, and packaging top-k output. Supports single-query `evaluate()` and `batch_evaluate()` with mean metric aggregation.
+- `exceptions.py` — `EvaluationError`, `NoRelevantItemsError`, `EmptyCandidateError`, `HeldOutDataError`
 
-**Tests:** Unit tests for metrics; integration test for full pipeline output
+**Dependencies:** Supervised learning evaluation metrics; Modules 1-4 (`CandidateRetrieval`, `HeuristicRanker`, `LearningToRankPipeline`, `ProductCatalog`)
+
+**Tests:** 81 tests — exceptions (6), metrics (31), holdout (15), payload (13), pipeline (11), integration (5)
 
 ## Repository Layout
 
@@ -292,6 +300,12 @@ pytest unit_tests/module2/ -v
 # Run Module 3 tests only
 pytest unit_tests/module3/ -v
 
+# Run Module 4 tests only
+pytest unit_tests/module4/ -v
+
+# Run Module 5 tests only
+pytest unit_tests/module5/ -v
+
 # Run integration tests
 pytest integration_tests/ -v
 
@@ -309,6 +323,7 @@ pytest unit_tests/ -v --cov=src
 | 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
 | 3 | Mar 19 | Modules 1-3 | Complete | 423 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 22 spell correction + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), spell correction, 256-entry NLP LRU cache, `/api/search?q=`, `/api/query-understand`, `/api/autocomplete`, `/api/products/{id}/similar`, inferred category chip, "Did you mean?" banner, autocomplete typeahead, search history + trending, recently viewed, customers also viewed (similar products), skeleton loading |
 | 4 | Apr 2 | Modules 1-4 | Complete | 474 tests (unit + integration). Module 4: 4 exception + 5 feature + 6 model + 4 pipeline + 15 query feature + 13 training data + 4 integration tests. LTR pipeline (product-quality features + query-product features → Logistic Regression classifier), synthetic training data generator, `/api/search` Module 4 re-ranking, `coef_as_dict()` interpretability |
+| 5 | Apr 16 | Modules 1-5 | Complete | 563 tests (unit + integration). Module 5: 6 exception + 31 metrics + 15 holdout + 13 payload + 11 pipeline + 5 integration tests. Evaluation pipeline (Precision@k, Recall@k, NDCG@k, MRR, MAP), HeldOutSet from review ratings, TopKResult payload, single-query and batch evaluation with metric aggregation, reproducible metrics |
 
 ## Evidence of Usage
 
@@ -356,7 +371,7 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-474 passed in 5.13s
+563 passed in 24.74s
 ```
 
 | Suite | Location | Count | Focus |
@@ -387,8 +402,14 @@ $ pytest --tb=no -q
 | Query Features | `unit_tests/module4/test_query_features.py` | 15 | Keyword overlap, cosine similarity bounds, category match, combined features |
 | Training Data | `unit_tests/module4/test_training_data.py` | 13 | Label generation, binary labels, both classes, determinism, feature dimension |
 | Integration Module 4 | `integration_tests/module4/test_module4_integration.py` | 4 | Package imports, pipeline with catalog, query features, training data |
+| Eval Exceptions | `unit_tests/module5/test_exceptions.py` | 6 | Exception hierarchy, EpicMarketplaceError inheritance, message content |
+| Eval Metrics | `unit_tests/module5/test_metrics.py` | 31 | Precision@k, Recall@k, NDCG@k, MRR, AP — perfect/partial/empty/edge cases, known values, graded relevance |
+| Eval Holdout | `unit_tests/module5/test_holdout.py` | 15 | HeldOutSet CRUD, build_holdout_from_reviews (threshold, missing cols), train/test split determinism |
+| Eval Payload | `unit_tests/module5/test_payload.py` | 13 | TopKResult frozen dataclass, build_top_k_payload schema, truncation, missing entries, score rounding |
+| Eval Pipeline | `unit_tests/module5/test_pipeline.py` | 11 | Single-query evaluation, batch evaluation, metric aggregation, empty inputs, holdout miss |
+| Integration Module 5 | `integration_tests/module5/test_module5_integration.py` | 5 | Package imports, full pipeline evaluation, batch aggregation, payload schema, reproducibility |
 
-**Total:** 474 tests
+**Total:** 563 tests
 
 ## Checkpoint 4 Reflection
 
