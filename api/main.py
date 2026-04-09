@@ -110,6 +110,11 @@ class SearchMetadata(BaseModel):
     page_size: int
     total_pages: int
     query_understanding: Optional[QueryUnderstandingInfo] = None
+    # Module 4 (LTR) — lets the UI show whether learning-to-rank changed the order
+    module4_ltr_requested: bool = True
+    module4_ltr_applied: bool = False
+    module4_trained_model: Optional[str] = None
+    module4_training_cv_roc_auc: Optional[float] = None
 
 
 class SearchResponse(BaseModel):
@@ -232,7 +237,7 @@ async def lifespan(app: FastAPI):
     # Keep a reference to the embedder for Module 4
     product_embedder = query_understanding._embedder
 
-    # Module 4: train LTR model on synthetic data
+    # Module 4: train LTR model on synthetic data (11 combined features)
     ltr_pipeline = LearningToRankPipeline()
     try:
         gen = TrainingDataGenerator(
@@ -241,8 +246,22 @@ async def lifespan(app: FastAPI):
             embedder=product_embedder,
         )
         X_train, y_train = gen.generate(max_products_per_query=50, seed=42)
-        ltr_pipeline.fit(list(catalog)[:200], labels=list(y_train[:200]))
-        logger.info("Module 4 LTR trained on %d examples", X_train.shape[0])
+        use_select = os.environ.get("LTR_MODEL_SELECT", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        ltr_pipeline.fit(
+            X=X_train,
+            labels=list(y_train),
+            select_best_model=use_select,
+        )
+        logger.info(
+            "Module 4 LTR trained on %d examples (%d features), model=%s",
+            X_train.shape[0],
+            X_train.shape[1],
+            ltr_pipeline.ranker.selected_model_name or "logistic_regression",
+        )
     except Exception as exc:
         logger.warning("Module 4 LTR training skipped: %s", exc)
 
@@ -275,7 +294,16 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "products": len(catalog) if catalog else 0}
+    out: dict = {"status": "ok", "products": len(catalog) if catalog else 0}
+    if ltr_pipeline and ltr_pipeline.ranker.is_fitted:
+        out["ltr"] = {
+            "fitted": True,
+            "model": ltr_pipeline.ranker.selected_model_name,
+            "training_cv_mean_roc_auc": ltr_pipeline.ranker.cv_mean_roc_auc,
+        }
+    else:
+        out["ltr"] = {"fitted": False}
+    return out
 
 
 @app.get("/api/categories", response_model=List[CategoryResponse])
@@ -365,22 +393,28 @@ async def search(
     strategy: str = Query("linear"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(24, ge=1, le=100, description="Products per page"),
+    use_ltr: bool = Query(
+        True,
+        description="If true, apply Module 4 learning-to-rank after Module 3 (when fitted).",
+    ),
 ):
     """
     Search for products matching filters.
 
     When `q` is provided, Module 3 (Query Understanding) extracts keywords,
     infers a category, and re-ranks candidates by embedding similarity.
+    Set ``use_ltr=false`` to skip Module 4 and compare ranking with vs. without LTR.
     """
     if not retrieval or not catalog:
         raise HTTPException(503, "Catalog not loaded")
 
     qu_info: Optional[QueryUnderstandingInfo] = None
+    qr: Optional[QueryResult] = None
 
     # --- Module 3: understand the query if provided ---
     effective_category = category
     if q and q.strip() and query_understanding:
-        qr: QueryResult = query_understanding.understand(q)
+        qr = query_understanding.understand(q)
         qu_info = QueryUnderstandingInfo(
             keywords=[[kw, round(sc, 4)] for kw, sc in qr.keywords],
             inferred_category=qr.inferred_category,
@@ -413,13 +447,31 @@ async def search(
         ranked_pairs = query_understanding.search_by_text(q, texts, top_k=len(candidate_ids))
         candidate_ids = [pid for pid, _ in ranked_pairs]
 
+    trained_model: Optional[str] = None
+    training_cv_auc: Optional[float] = None
+    if ltr_pipeline and ltr_pipeline.ranker.is_fitted:
+        trained_model = ltr_pipeline.ranker.selected_model_name
+        training_cv_auc = ltr_pipeline.ranker.cv_mean_roc_auc
+
+    module4_applied = False
     # --- Module 4: LTR re-rank using combined features ---
-    if ltr_pipeline and ltr_pipeline.ranker.is_fitted and candidate_ids:
+    if (
+        use_ltr
+        and ltr_pipeline
+        and ltr_pipeline.ranker.is_fitted
+        and candidate_ids
+    ):
         try:
             ltr_products = [catalog[pid] for pid in candidate_ids]
             price_band = (price_min, price_max) if price_min is not None and price_max is not None else None
-            ltr_scored = ltr_pipeline.rank(ltr_products, price_band=price_band)
+            ltr_scored = ltr_pipeline.rank(
+                ltr_products,
+                price_band=price_band,
+                query_result=qr,
+                embedder=product_embedder if qr else None,
+            )
             candidate_ids = [pid for pid, _ in ltr_scored]
+            module4_applied = True
         except Exception as exc:
             logger.warning("Module 4 LTR re-rank skipped: %s", exc)
 
@@ -447,6 +499,10 @@ async def search(
             page_size=page_size,
             total_pages=total_pages,
             query_understanding=qu_info,
+            module4_ltr_requested=use_ltr,
+            module4_ltr_applied=module4_applied,
+            module4_trained_model=trained_model,
+            module4_training_cv_roc_auc=training_cv_auc,
         ),
     )
 

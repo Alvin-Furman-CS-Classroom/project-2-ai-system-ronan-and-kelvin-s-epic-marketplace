@@ -1,7 +1,10 @@
 """
 Supervised quality–value ranker (Module 4).
 
-Uses **binary classification** (logistic regression). Two training paths:
+Uses **binary classification** (default: logistic regression). Optional **model
+selection** compares logistic regression, random forest, and gradient boosting
+via stratified ROC AUC and keeps the best (see :mod:`src.module4.model_selection`).
+Two training paths:
 
 1. **Quality-only** (7 features) — :func:`~src.module4.features.compute_quality_value_features`
 2. **Combined** (11 features) — product quality ∪ Module 3 query–product features via
@@ -20,7 +23,7 @@ synthetic LTR batches; defaults favor **moderate regularization** (``C=2.0``).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -95,14 +98,14 @@ def _heuristic_scores(X: np.ndarray) -> np.ndarray:
 
 def _classifier_step(
     estimator: Union[Pipeline, LogisticRegression],
-) -> LogisticRegression:
+) -> Any:
     if isinstance(estimator, Pipeline):
         return estimator.named_steps["clf"]
     return estimator
 
 
 class QualityValueRanker:
-    """Logistic regression over product-quality and/or combined LTR features."""
+    """Classifier over product-quality and/or combined LTR features (default: logistic regression)."""
 
     def __init__(
         self,
@@ -113,6 +116,10 @@ class QualityValueRanker:
         tol: float = _DEFAULT_TOL,
         use_feature_scaling: bool = True,
     ) -> None:
+        self._random_state = random_state
+        self._max_iter = max_iter
+        self._C = C
+        self._tol = tol
         clf = LogisticRegression(
             random_state=random_state,
             max_iter=max_iter,
@@ -134,6 +141,8 @@ class QualityValueRanker:
         self._fitted = False
         self._price_band: Optional[Tuple[float, float]] = None
         self._n_features: Optional[int] = None
+        self._selected_model_name: Optional[str] = None
+        self._last_cv_mean_roc_auc: Optional[float] = None
 
     @property
     def is_fitted(self) -> bool:
@@ -144,6 +153,16 @@ class QualityValueRanker:
         """Feature width expected at ``score`` time (7 or 11). ``None`` if unfitted."""
         return self._n_features
 
+    @property
+    def selected_model_name(self) -> Optional[str]:
+        """Set after ``fit`` — ``logistic_regression`` by default, or CV winner if ``select_best_model``."""
+        return self._selected_model_name
+
+    @property
+    def cv_mean_roc_auc(self) -> Optional[float]:
+        """Mean CV ROC AUC for the selected model when ``select_best_model`` was used; else ``None``."""
+        return self._last_cv_mean_roc_auc
+
     def fit(
         self,
         products: Optional[Sequence[Product]] = None,
@@ -153,6 +172,7 @@ class QualityValueRanker:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        select_best_model: bool = False,
     ) -> "QualityValueRanker":
         """Train the classifier.
 
@@ -170,6 +190,8 @@ class QualityValueRanker:
             price_band: Passed through to feature builders when ``X`` is not used.
             query_result: Module 3 output for combined features.
             embedder: Shared ``ProductEmbedder`` (must match training / inference).
+            select_best_model: If ``True`` (only with ``X`` and explicit ``labels``), run
+                stratified CV over several classifiers and refit the ROC-AUC winner.
 
         Raises:
             InsufficientTrainingDataError: Invalid shapes, too few rows, or one class only.
@@ -218,15 +240,35 @@ class QualityValueRanker:
                 "training labels have a single class — cannot fit logistic model"
             )
 
-        self._estimator.fit(X_arr, y)
+        if select_best_model:
+            if X is None or labels is None:
+                raise InsufficientTrainingDataError(
+                    "select_best_model requires precomputed X and explicit labels"
+                )
+            from src.module4.model_selection import fit_best_pipeline
+
+            name, cv_mean, pipe = fit_best_pipeline(
+                X_arr,
+                y,
+                random_state=self._random_state,
+                n_splits=5,
+            )
+            self._estimator = pipe
+            self._selected_model_name = name
+            self._last_cv_mean_roc_auc = float(cv_mean)
+        else:
+            self._estimator.fit(X_arr, y)
+            self._selected_model_name = "logistic_regression"
+            self._last_cv_mean_roc_auc = None
         self._fitted = True
         self._price_band = price_band
         self._n_features = int(X_arr.shape[1])
         logger.info(
-            "QualityValueRanker fitted on %d examples, %d features (positive rate %.2f)",
+            "QualityValueRanker fitted on %d examples, %d features (positive rate %.2f, model=%s)",
             X_arr.shape[0],
             self._n_features,
             float(np.mean(y)),
+            self._selected_model_name or "?",
         )
         return self
 
@@ -284,5 +326,9 @@ class QualityValueRanker:
             raise ModelNotFittedError("QualityValueRanker is not fitted")
         names = COMBINED_FEATURE_NAMES if self._n_features == COMBINED_FEATURE_DIM else FEATURE_NAMES
         clf = _classifier_step(self._estimator)
+        if not hasattr(clf, "coef_"):
+            raise ValueError(
+                "coef_as_dict is only available for linear (logistic regression) models."
+            )
         coef = clf.coef_.ravel()
         return {name: float(c) for name, c in zip(names, coef)}

@@ -34,6 +34,13 @@ export interface SearchMetadata {
   page_size: number;
   total_pages: number;
   query_understanding?: QueryUnderstandingInfo | null;
+  /** User asked for Module 4 LTR on this request */
+  module4_ltr_requested?: boolean;
+  /** LTR re-rank actually ran (needs query + fitted model) */
+  module4_ltr_applied?: boolean;
+  module4_trained_model?: string | null;
+  /** CV ROC AUC mean for selected model at API startup (if model selection ran) */
+  module4_training_cv_roc_auc?: number | null;
 }
 
 export interface SearchResponse {
@@ -58,6 +65,8 @@ export interface SearchParams {
   strategy?: string;
   page?: number;
   page_size?: number;
+  /** false → skip Module 4 LTR (compare with baseline ordering) */
+  use_ltr?: boolean;
 }
 
 export interface DealProduct {

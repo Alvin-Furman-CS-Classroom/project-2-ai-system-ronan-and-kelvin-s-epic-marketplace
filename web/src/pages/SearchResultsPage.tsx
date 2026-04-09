@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Sparkles, Tag, Search, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Tag, Search, Clock, GraduationCap } from "lucide-react";
 import { fetchCategories, searchProducts } from "../api";
 import type { Category, Product, SearchMetadata, SearchParams, QueryUnderstandingInfo } from "../types";
 import Navbar from "../components/Navbar";
@@ -50,6 +50,7 @@ export default function SearchResultsPage() {
     strategy: searchParams.get("strategy") || "linear",
     page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
     page_size: PAGE_SIZE,
+    use_ltr: searchParams.get("use_ltr") !== "0",
   }), [searchParams]);
 
   const [filters, setFilters] = useState<SearchParams>(filtersFromURL);
@@ -74,6 +75,7 @@ export default function SearchResultsPage() {
   const fetchRef = useRef(0);
   useEffect(() => {
     const fetchId = ++fetchRef.current;
+    setLoading(true);
     setProducts([]);
     setMetadata(null);
 
@@ -98,9 +100,13 @@ export default function SearchResultsPage() {
     setLoading(true);
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(next)) {
-      if (v !== undefined && v !== null && v !== "") {
-        params.set(k, String(v));
+      if (v === undefined || v === null || v === "") continue;
+      if (k === "use_ltr") {
+        if (v === true) continue;
+        params.set("use_ltr", "0");
+        continue;
       }
+      params.set(k, String(v));
     }
     if (params.get("page") === "1") params.delete("page");
     params.delete("page_size");
@@ -146,6 +152,25 @@ export default function SearchResultsPage() {
                 : filters.category || "All Products"}
             </h1>
             {metadata && <div className="mt-2"><SearchMeta metadata={metadata} /></div>}
+          </div>
+
+          {/* Module 4 toggle: sidebar is hidden on small screens */}
+          <div className="mb-4 md:hidden">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text)] shadow-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
+                checked={filtersFromURL.use_ltr !== false}
+                onChange={(e) =>
+                  handleFilterChange({
+                    ...filtersFromURL,
+                    use_ltr: e.target.checked,
+                  })
+                }
+              />
+              <GraduationCap className="h-4 w-4 shrink-0 text-[var(--color-brand)]" aria-hidden />
+              <span className="font-medium">Module 4 LTR ranking</span>
+            </label>
           </div>
 
           {/* Module 3: "Did you mean?" spell correction */}

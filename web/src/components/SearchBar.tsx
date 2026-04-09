@@ -109,6 +109,11 @@ export default function SearchBar({ initialQuery = "", compact = false }: Props)
     if (trimmed) addQuery(trimmed);
     const params = new URLSearchParams();
     if (trimmed) params.set("q", trimmed);
+    if (location.pathname === "/search") {
+      const cur = new URLSearchParams(location.search);
+      if (cur.get("use_ltr") === "0") params.set("use_ltr", "0");
+      if (cur.get("strategy")) params.set("strategy", cur.get("strategy")!);
+    }
     const target = `/search?${params.toString()}`;
     if (location.pathname === "/search") {
       navigate(target, { replace: true });

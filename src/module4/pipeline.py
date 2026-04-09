@@ -52,11 +52,15 @@ class LearningToRankPipeline:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        select_best_model: bool = False,
     ) -> "LearningToRankPipeline":
         """Train the underlying classifier.
 
         Supply ``X`` for :class:`TrainingDataGenerator` matrices, or ``products``
         + optional ``query_result`` / ``embedder`` for on-the-fly combined features.
+
+        Set ``select_best_model=True`` with ``X`` and ``labels`` to run CV and keep
+        the best ROC AUC model (see :mod:`src.module4.model_selection`).
         """
         try:
             y = None if labels is None else np.asarray(labels, dtype=np.int64)
@@ -67,6 +71,7 @@ class LearningToRankPipeline:
                 price_band=price_band,
                 query_result=query_result,
                 embedder=embedder,
+                select_best_model=select_best_model,
             )
         except InsufficientTrainingDataError as e:
             logger.warning("LTR fit skipped: %s — using heuristic scoring at rank time", e)

@@ -40,6 +40,38 @@ export default function SearchMeta({ metadata }: Props) {
           {metadata.elapsed_ms.toFixed(2)}ms
         </strong>
       </span>
+      {(metadata.module4_ltr_requested !== undefined ||
+        metadata.module4_trained_model) && (
+        <>
+          <span className="text-gray-300">|</span>
+          <span>
+            Module 4 LTR:{" "}
+            <strong
+              className={
+                metadata.module4_ltr_applied
+                  ? "text-emerald-700"
+                  : "text-[var(--color-text)]"
+              }
+            >
+              {metadata.module4_ltr_applied
+                ? "applied to order"
+                : metadata.module4_ltr_requested === false
+                  ? "disabled (baseline order)"
+                  : "not applied (no text query or model unavailable)"}
+            </strong>
+            {metadata.module4_trained_model && (
+              <span className="ml-1 text-[var(--color-text-muted)]">
+                ({metadata.module4_trained_model}
+                {metadata.module4_training_cv_roc_auc != null &&
+                metadata.module4_training_cv_roc_auc !== undefined
+                  ? ` · CV ROC AUC ${metadata.module4_training_cv_roc_auc.toFixed(3)}`
+                  : ""}
+                )
+              </span>
+            )}
+          </span>
+        </>
+      )}
     </div>
   );
 }

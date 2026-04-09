@@ -1,3 +1,4 @@
+import { GraduationCap } from "lucide-react";
 import type { SearchParams } from "../types";
 
 interface Props {
@@ -150,6 +151,31 @@ export default function FilterSidebar({ filters, onChange, categories }: Props) 
         <p className="mt-1 text-xs text-[var(--color-text-muted)]">
           Module 1: Compare different search algorithms
         </p>
+      </div>
+
+      {/* Module 4 — learning-to-rank (matches /api/search use_ltr) */}
+      <div>
+        <h4 className="mb-2 text-sm font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+          Module 4 LTR
+        </h4>
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--color-border)] bg-white p-3 text-sm text-[var(--color-text)] shadow-sm transition hover:bg-gray-50/80">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
+            checked={filters.use_ltr !== false}
+            onChange={(e) => update({ use_ltr: e.target.checked })}
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-medium">
+              <GraduationCap className="h-4 w-4 shrink-0 text-[var(--color-brand)]" aria-hidden />
+              Ranking model
+            </span>
+            <span className="mt-0.5 block text-xs font-normal leading-snug text-[var(--color-text-muted)]">
+              When on, results are re-ordered with learning-to-rank after NLP. Turn off to compare the
+              baseline order.
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* Clear */}

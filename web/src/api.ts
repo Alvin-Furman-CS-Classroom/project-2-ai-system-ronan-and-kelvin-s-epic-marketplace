@@ -22,11 +22,11 @@ export async function fetchCategories(): Promise<Category[]> {
 /** Search for products */
 export async function searchProducts(params: SearchParams): Promise<SearchResponse> {
   // Strip undefined keys so they don't appear as "undefined" in the URL
-  const clean: Record<string, string | number> = {};
+  const clean: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== "") {
-      clean[k] = v;
-    }
+    if (v === undefined || v === null || v === "") continue;
+    if (k === "use_ltr" && v === true) continue;
+    clean[k] = v as string | number | boolean;
   }
   const { data } = await api.get<SearchResponse>("/search", { params: clean });
   return data;
