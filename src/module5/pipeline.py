@@ -38,7 +38,7 @@ class EvaluationResult:
 
     Attributes:
         payload: The top-k user-facing result with product details.
-        metrics: Evaluation metrics (precision, recall, NDCG, MRR, AP).
+        metrics: Evaluation metrics (precision, recall, F1, NDCG, MRR, AP).
         query: The query that was evaluated.
     """
 
@@ -228,6 +228,7 @@ class EvaluationPipeline:
         metric_keys = [
             "precision_at_k",
             "recall_at_k",
+            "f1_at_k",
             "ndcg_at_k",
             "reciprocal_rank",
             "average_precision",

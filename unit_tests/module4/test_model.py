@@ -74,7 +74,7 @@ def test_use_feature_scaling_disabled_still_trains():
 
 
 def test_fit_from_precomputed_X_matches_training_data_width():
-    """Partner path: TrainingDataGenerator-style (n, 11) matrix."""
+    """Partner path: TrainingDataGenerator-style (n, COMBINED_FEATURE_DIM) matrix."""
     from src.module4.query_features import COMBINED_FEATURE_DIM
 
     rng = np.random.default_rng(0)

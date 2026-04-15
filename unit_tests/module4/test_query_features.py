@@ -10,6 +10,7 @@ from src.module4.query_features import (
     QUERY_FEATURE_DIM,
     QUERY_FEATURE_NAMES,
     _keyword_overlap,
+    _title_relevance,
     compute_query_product_features,
     compute_combined_features,
 )
@@ -103,6 +104,33 @@ def test_keyword_overlap_empty_keywords():
 
 
 # ---------------------------------------------------------------------------
+# _title_relevance
+# ---------------------------------------------------------------------------
+
+def test_title_relevance_high_for_direct_match():
+    vec = np.random.rand(100).astype(np.float32)
+    vec /= np.linalg.norm(vec)
+    embedder = _FakeEmbedder({"bluetooth": vec})
+    p = _make_product(title="Bluetooth Headphones Wireless")
+    score = _title_relevance({"bluetooth", "headphones"}, vec, p, embedder)
+    assert score > 0.0
+
+
+def test_title_relevance_zero_for_no_query_tokens():
+    embedder = _FakeEmbedder()
+    p = _make_product()
+    score = _title_relevance(set(), np.zeros(100, dtype=np.float32), p, embedder)
+    assert score == 0.0
+
+
+def test_title_relevance_zero_for_empty_title():
+    embedder = _FakeEmbedder()
+    p = _make_product(title="")
+    score = _title_relevance({"laptop"}, np.ones(100, dtype=np.float32), p, embedder)
+    assert score == 0.0
+
+
+# ---------------------------------------------------------------------------
 # compute_query_product_features
 # ---------------------------------------------------------------------------
 
@@ -162,6 +190,37 @@ def test_no_inferred_category_gives_zero_match():
 
 
 # ---------------------------------------------------------------------------
+# module3_relevance_score column
+# ---------------------------------------------------------------------------
+
+def test_module3_score_default_zero():
+    products = [_make_product()]
+    qr = _make_qr()
+    embedder = _FakeEmbedder()
+    X = compute_query_product_features(products, qr, embedder)
+    assert X[0, 4] == 0.0
+
+
+def test_module3_score_from_dict():
+    products = [_make_product(id="p1"), _make_product(id="p2", title="Other Thing")]
+    qr = _make_qr()
+    embedder = _FakeEmbedder()
+    m3 = {"p1": 0.95, "p2": 0.42}
+    X = compute_query_product_features(products, qr, embedder, module3_scores=m3)
+    assert X[0, 4] == pytest.approx(0.95)
+    assert X[1, 4] == pytest.approx(0.42)
+
+
+def test_module3_score_missing_product_defaults_zero():
+    products = [_make_product(id="p1")]
+    qr = _make_qr()
+    embedder = _FakeEmbedder()
+    m3 = {"other_id": 0.9}
+    X = compute_query_product_features(products, qr, embedder, module3_scores=m3)
+    assert X[0, 4] == 0.0
+
+
+# ---------------------------------------------------------------------------
 # compute_combined_features
 # ---------------------------------------------------------------------------
 
@@ -193,3 +252,19 @@ def test_combined_quality_columns_preserved():
     X_combined = compute_combined_features(products, qr, embedder, price_band=(10.0, 100.0))
     X_quality = compute_quality_value_features(products, price_band=(10.0, 100.0))
     np.testing.assert_array_almost_equal(X_combined[:, :FEATURE_DIM], X_quality)
+
+
+def test_combined_with_module3_scores():
+    """Module 3 scores should appear in the module3_relevance_score column."""
+    from src.module4.features import FEATURE_DIM
+    from src.module4.query_features import COMBINED_FEATURE_DIM
+
+    products = [_make_product(id="a"), _make_product(id="b", price=60.0)]
+    qr = _make_qr()
+    embedder = _FakeEmbedder()
+    m3 = {"a": 0.88, "b": 0.33}
+    X = compute_combined_features(products, qr, embedder, module3_scores=m3)
+    assert X.shape == (2, COMBINED_FEATURE_DIM)
+    m3_col = FEATURE_DIM + QUERY_FEATURE_NAMES.index("module3_relevance_score")
+    assert X[0, m3_col] == pytest.approx(0.88)
+    assert X[1, m3_col] == pytest.approx(0.33)

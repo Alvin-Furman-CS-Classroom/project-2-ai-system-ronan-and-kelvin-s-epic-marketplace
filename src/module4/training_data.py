@@ -51,9 +51,10 @@ SAMPLE_QUERIES = [
 ]
 
 _LABEL_WEIGHTS = {
-    "cosine_sim": 0.30,
-    "category_match": 0.25,
-    "keyword_overlap": 0.15,
+    "cosine_sim": 0.20,
+    "category_match": 0.20,
+    "keyword_overlap": 0.10,
+    "title_relevance": 0.20,
     "rating_norm": 0.15,
     "review_strength": 0.10,
     "noise": 0.05,
@@ -139,8 +140,13 @@ class TrainingDataGenerator:
             if len(sample) < 2:
                 continue
 
+            texts = {p.id: f"{p.title} {p.description or ''}" for p in sample}
+            ranked_pairs = self._qu.search_by_text(query, texts, top_k=len(sample))
+            module3_scores = {pid: score for pid, score in ranked_pairs}
+
             X_batch = compute_combined_features(
                 sample, qr, self._embedder, price_band=None,
+                module3_scores=module3_scores,
             )
 
             scores = self._compute_relevance_scores(qr, sample, rng)
@@ -178,6 +184,7 @@ class TrainingDataGenerator:
         """Weighted composite relevance score for each product."""
         q_emb = qr.query_embedding
         inferred_cat = (qr.inferred_category or "").lower()
+        query_kw_set = set(kw.lower() for kw, _ in qr.keywords)
 
         scores = np.zeros(len(products), dtype=np.float64)
         for i, p in enumerate(products):
@@ -191,10 +198,21 @@ class TrainingDataGenerator:
             review_strength = float(np.log1p(p.rating_number or 0)) / 12.0
             noise = rng.gauss(0, 0.1)
 
+            # Title relevance: query keyword coverage + embedding sim to title
+            title_tokens = set(tokenize(p.title))
+            if title_tokens and query_kw_set:
+                coverage = sum(1 for qt in query_kw_set if qt in title_tokens) / len(query_kw_set)
+                title_emb = self._embedder.embed_text(p.title)
+                title_sim = max(0.0, float(_cosine_similarity(q_emb, title_emb)))
+                title_rel = 0.5 * coverage + 0.5 * title_sim
+            else:
+                title_rel = 0.0
+
             scores[i] = (
                 _LABEL_WEIGHTS["cosine_sim"] * cos_sim
                 + _LABEL_WEIGHTS["category_match"] * cat_match
                 + _LABEL_WEIGHTS["keyword_overlap"] * kw_overlap
+                + _LABEL_WEIGHTS["title_relevance"] * title_rel
                 + _LABEL_WEIGHTS["rating_norm"] * rating_norm
                 + _LABEL_WEIGHTS["review_strength"] * review_strength
                 + _LABEL_WEIGHTS["noise"] * noise

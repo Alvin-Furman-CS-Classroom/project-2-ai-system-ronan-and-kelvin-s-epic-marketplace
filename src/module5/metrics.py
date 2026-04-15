@@ -62,6 +62,28 @@ def recall_at_k(
     return hits / len(relevant_ids)
 
 
+def f1_at_k(
+    ranked_ids: List[str],
+    relevant_ids: Set[str],
+    k: int,
+) -> float:
+    """Harmonic mean of Precision@k and Recall@k.
+
+    Args:
+        ranked_ids: Product IDs in rank order (best first).
+        relevant_ids: Ground-truth relevant product IDs.
+        k: Cut-off position (must be >= 1).
+
+    Returns:
+        F1@k in [0, 1].  Returns 0.0 when both precision and recall are 0.
+    """
+    p = precision_at_k(ranked_ids, relevant_ids, k)
+    r = recall_at_k(ranked_ids, relevant_ids, k)
+    if p + r == 0.0:
+        return 0.0
+    return 2 * p * r / (p + r)
+
+
 def _dcg(relevances: List[float], k: int) -> float:
     """Discounted Cumulative Gain at position *k*."""
     total = 0.0
@@ -176,11 +198,13 @@ def compute_all_metrics(
 
     Returns:
         Dictionary with keys ``precision_at_k``, ``recall_at_k``,
-        ``ndcg_at_k``, ``reciprocal_rank``, ``average_precision``.
+        ``f1_at_k``, ``ndcg_at_k``, ``reciprocal_rank``,
+        ``average_precision``.
     """
     return {
         "precision_at_k": precision_at_k(ranked_ids, relevant_ids, k),
         "recall_at_k": recall_at_k(ranked_ids, relevant_ids, k),
+        "f1_at_k": f1_at_k(ranked_ids, relevant_ids, k),
         "ndcg_at_k": ndcg_at_k(ranked_ids, relevant_ids, k, relevance_scores),
         "reciprocal_rank": reciprocal_rank(ranked_ids, relevant_ids),
         "average_precision": average_precision(ranked_ids, relevant_ids),

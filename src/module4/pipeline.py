@@ -18,7 +18,7 @@ Typical use:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -52,6 +52,7 @@ class LearningToRankPipeline:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        module3_scores: Optional[Dict[str, float]] = None,
         select_best_model: bool = False,
     ) -> "LearningToRankPipeline":
         """Train the underlying classifier.
@@ -71,6 +72,7 @@ class LearningToRankPipeline:
                 price_band=price_band,
                 query_result=query_result,
                 embedder=embedder,
+                module3_scores=module3_scores,
                 select_best_model=select_best_model,
             )
         except InsufficientTrainingDataError as e:
@@ -85,6 +87,7 @@ class LearningToRankPipeline:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        module3_scores: Optional[Dict[str, float]] = None,
     ) -> List[Tuple[str, float]]:
         """Return ``final_scores`` as ``(product_id, score)`` descending."""
         scored = self._ranker.score(
@@ -92,6 +95,7 @@ class LearningToRankPipeline:
             price_band=price_band,
             query_result=query_result,
             embedder=embedder,
+            module3_scores=module3_scores,
         )
         if top_k is not None:
             return scored[: max(0, top_k)]
@@ -106,6 +110,7 @@ class LearningToRankPipeline:
         top_k: Optional[int] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        module3_scores: Optional[Dict[str, float]] = None,
     ) -> List[Tuple[str, float]]:
         """Convenience: ``fit`` then ``rank`` on the same candidate set."""
         self.fit(
@@ -114,6 +119,7 @@ class LearningToRankPipeline:
             price_band=price_band,
             query_result=query_result,
             embedder=embedder,
+            module3_scores=module3_scores,
         )
         return self.rank(
             products,
@@ -121,4 +127,5 @@ class LearningToRankPipeline:
             price_band=price_band,
             query_result=query_result,
             embedder=embedder,
+            module3_scores=module3_scores,
         )

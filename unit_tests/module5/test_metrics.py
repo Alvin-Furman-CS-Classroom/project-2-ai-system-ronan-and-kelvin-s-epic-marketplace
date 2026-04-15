@@ -7,6 +7,7 @@ import pytest
 from src.module5.metrics import (
     average_precision,
     compute_all_metrics,
+    f1_at_k,
     ndcg_at_k,
     precision_at_k,
     recall_at_k,
@@ -67,6 +68,35 @@ class TestRecallAtK:
 
     def test_k_zero(self, perfect_ranking, relevant_set):
         assert recall_at_k(perfect_ranking, relevant_set, 0) == pytest.approx(0.0)
+
+
+# ── F1@k ──────────────────────────────────────────────────────────────────
+
+class TestF1AtK:
+
+    def test_perfect_ranking(self, perfect_ranking, relevant_set):
+        assert f1_at_k(perfect_ranking, relevant_set, 3) == pytest.approx(1.0)
+
+    def test_no_relevant_in_top_k(self, relevant_set):
+        ranked = ["p5", "p6", "p3"]
+        assert f1_at_k(ranked, relevant_set, 3) == pytest.approx(0.0)
+
+    def test_known_value(self, relevant_set):
+        """2 of 3 relevant in top 4 → P=0.5, R=2/3, F1=2*0.5*(2/3)/(0.5+2/3)."""
+        ranked = ["p1", "p5", "p2", "p6"]
+        p = 0.5
+        r = 2 / 3
+        expected = 2 * p * r / (p + r)
+        assert f1_at_k(ranked, relevant_set, 4) == pytest.approx(expected)
+
+    def test_empty_ranked_list(self, relevant_set):
+        assert f1_at_k([], relevant_set, 3) == pytest.approx(0.0)
+
+    def test_empty_relevant_set(self, perfect_ranking):
+        assert f1_at_k(perfect_ranking, set(), 3) == pytest.approx(0.0)
+
+    def test_k_zero(self, perfect_ranking, relevant_set):
+        assert f1_at_k(perfect_ranking, relevant_set, 0) == pytest.approx(0.0)
 
 
 # ── NDCG@k ───────────────────────────────────────────────────────────────
@@ -170,6 +200,7 @@ class TestComputeAllMetrics:
         m = compute_all_metrics(perfect_ranking, relevant_set, 3)
         assert "precision_at_k" in m
         assert "recall_at_k" in m
+        assert "f1_at_k" in m
         assert "ndcg_at_k" in m
         assert "reciprocal_rank" in m
         assert "average_precision" in m

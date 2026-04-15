@@ -359,8 +359,11 @@ async def get_similar_products(
         for p in catalog
         if p.id != product_id
     }
+    titles = {p.id: p.title for p in catalog if p.id != product_id}
 
-    ranked = query_understanding.search_by_text(query_text, texts, top_k=limit)
+    ranked = query_understanding.search_by_text(
+        query_text, texts, top_k=limit, titles=titles,
+    )
 
     return [
         ProductResponse.from_product(catalog[pid])
@@ -439,13 +442,18 @@ async def search(
 
     # --- Module 3: re-rank by text relevance when q is present ---
     candidate_ids = result.candidate_ids
+    module3_scores: Optional[dict[str, float]] = None
     if q and q.strip() and query_understanding and candidate_ids:
         texts = {
             pid: f"{catalog[pid].title} {catalog[pid].description or ''}"
             for pid in candidate_ids
         }
-        ranked_pairs = query_understanding.search_by_text(q, texts, top_k=len(candidate_ids))
+        titles = {pid: catalog[pid].title for pid in candidate_ids}
+        ranked_pairs = query_understanding.search_by_text(
+            q, texts, top_k=len(candidate_ids), titles=titles,
+        )
         candidate_ids = [pid for pid, _ in ranked_pairs]
+        module3_scores = {pid: score for pid, score in ranked_pairs}
 
     trained_model: Optional[str] = None
     training_cv_auc: Optional[float] = None
@@ -454,7 +462,7 @@ async def search(
         training_cv_auc = ltr_pipeline.ranker.cv_mean_roc_auc
 
     module4_applied = False
-    # --- Module 4: LTR re-rank using combined features ---
+    # --- Module 4: LTR re-rank — refines Module 3's ordering ---
     if (
         use_ltr
         and ltr_pipeline
@@ -469,8 +477,21 @@ async def search(
                 price_band=price_band,
                 query_result=qr,
                 embedder=product_embedder if qr else None,
+                module3_scores=module3_scores,
             )
-            candidate_ids = [pid for pid, _ in ltr_scored]
+            # Blend Module 3 relevance with Module 4 quality so LTR
+            # refines the text-relevance ordering rather than replacing it.
+            if module3_scores:
+                ltr_dict = {pid: score for pid, score in ltr_scored}
+                blended = []
+                for pid in ltr_dict:
+                    m3 = module3_scores.get(pid, 0.0)
+                    m4 = ltr_dict[pid]
+                    blended.append((pid, 0.55 * m3 + 0.45 * m4))
+                blended.sort(key=lambda x: x[1], reverse=True)
+                candidate_ids = [pid for pid, _ in blended]
+            else:
+                candidate_ids = [pid for pid, _ in ltr_scored]
             module4_applied = True
         except Exception as exc:
             logger.warning("Module 4 LTR re-rank skipped: %s", exc)

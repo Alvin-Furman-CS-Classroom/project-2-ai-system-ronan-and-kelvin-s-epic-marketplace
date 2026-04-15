@@ -23,7 +23,7 @@ synthetic LTR batches; defaults favor **moderate regularization** (``C=2.0``).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -56,11 +56,11 @@ _PROXY_WEIGHTS_QUALITY = np.array(
     [0.30, 0.22, 0.18, 0.12, 0.08, 0.06, 0.04], dtype=np.float64
 )
 
-# Combined: quality block + (cosine, keyword_overlap, category_match, confidence)
+# Combined: quality block + (cosine, kw_overlap, cat_match, confidence, m3_score, title_relevance)
 _RAW_COMBINED = np.concatenate(
     [
-        _PROXY_WEIGHTS_QUALITY * 0.58,
-        np.array([0.18, 0.12, 0.10, 0.02], dtype=np.float64),
+        _PROXY_WEIGHTS_QUALITY * 0.40,
+        np.array([0.10, 0.07, 0.06, 0.02, 0.20, 0.15], dtype=np.float64),
     ]
 )
 _PROXY_WEIGHTS_COMBINED = _RAW_COMBINED / _RAW_COMBINED.sum()
@@ -172,6 +172,7 @@ class QualityValueRanker:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        module3_scores: Optional[Dict[str, float]] = None,
         select_best_model: bool = False,
     ) -> "QualityValueRanker":
         """Train the classifier.
@@ -179,8 +180,8 @@ class QualityValueRanker:
         Provide **one** of:
 
         - ``X``: precomputed feature matrix (e.g. from
-          :meth:`TrainingDataGenerator.generate`) — shape ``(n, 7)`` or ``(n, 11)``.
-        - ``query_result`` + ``embedder`` + ``products``: builds **combined** (11-dim) rows.
+          :meth:`TrainingDataGenerator.generate`) -- shape ``(n, 7)`` or ``(n, 12)``.
+        - ``query_result`` + ``embedder`` + ``products``: builds **combined** (12-dim) rows.
         - ``products`` only: builds **quality-only** (7-dim) rows.
 
         Args:
@@ -190,6 +191,8 @@ class QualityValueRanker:
             price_band: Passed through to feature builders when ``X`` is not used.
             query_result: Module 3 output for combined features.
             embedder: Shared ``ProductEmbedder`` (must match training / inference).
+            module3_scores: Optional ``{product_id: score}`` from Module 3
+                text-ranking pass, included as a feature for combined models.
             select_best_model: If ``True`` (only with ``X`` and explicit ``labels``), run
                 stratified CV over several classifiers and refit the ROC-AUC winner.
 
@@ -210,7 +213,8 @@ class QualityValueRanker:
                     "products required when using query_result + embedder"
                 )
             X_arr = compute_combined_features(
-                list(products), query_result, embedder, price_band=price_band
+                list(products), query_result, embedder,
+                price_band=price_band, module3_scores=module3_scores,
             )
         elif products is not None and len(list(products)) > 0:
             X_arr = compute_quality_value_features(list(products), price_band=price_band)
@@ -279,11 +283,13 @@ class QualityValueRanker:
         price_band: Optional[Tuple[float, float]] = None,
         query_result: Optional[QueryResult] = None,
         embedder: Optional[ProductEmbedder] = None,
+        module3_scores: Optional[Dict[str, float]] = None,
     ) -> List[Tuple[str, float]]:
         """Return ``(product_id, score)`` sorted by descending score.
 
         If the model was trained on **combined** features, pass the same
-        ``query_result`` and ``embedder`` used at training time for that query.
+        ``query_result`` and ``embedder`` used at training time for that query,
+        along with ``module3_scores`` from Module 3's text-ranking pass.
         """
         products_list = list(products)
         if not products_list:
@@ -294,15 +300,15 @@ class QualityValueRanker:
         if self._fitted and self._n_features == COMBINED_FEATURE_DIM:
             if query_result is None or embedder is None:
                 raise ValueError(
-                    "query_result and embedder are required when scoring a combined (11-feature) model"
+                    "query_result and embedder are required when scoring a combined model"
                 )
             X = compute_combined_features(
-                products_list, query_result, embedder, price_band=band
+                products_list, query_result, embedder,
+                price_band=band, module3_scores=module3_scores,
             )
         elif self._fitted and self._n_features == FEATURE_DIM:
             X = compute_quality_value_features(products_list, price_band=band)
         else:
-            # Unfitted: default to quality heuristic (7-dim); needs no query
             X = compute_quality_value_features(products_list, price_band=band)
 
         if not self._fitted:

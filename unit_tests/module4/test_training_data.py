@@ -47,6 +47,11 @@ class _FakeQU:
             confidence=0.85,
         )
 
+    def search_by_text(self, query: str, texts, top_k: int = 50):
+        """Fake text ranking: return items with descending dummy scores."""
+        items = list(texts.keys())[:top_k]
+        return [(pid, max(0.0, 0.9 - i * 0.03)) for i, pid in enumerate(items)]
+
 
 def _small_catalog() -> ProductCatalog:
     products = [
