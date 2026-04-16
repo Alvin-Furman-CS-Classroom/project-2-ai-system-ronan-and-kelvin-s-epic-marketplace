@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
-import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse, QueryUnderstandResponse, AutocompleteResponse } from "./types";
+import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse, QueryUnderstandResponse, AutocompleteResponse, EvaluateParams, EvaluateResponse } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -128,6 +128,20 @@ export async function fetchAutocomplete(q: string): Promise<AutocompleteResponse
 export async function fetchQueryUnderstand(q: string): Promise<QueryUnderstandResponse> {
   const { data } = await api.get<QueryUnderstandResponse>("/query-understand", {
     params: { q },
+  });
+  return data;
+}
+
+/** Module 5: run evaluation against review-derived ground truth */
+export async function fetchEvaluate(params: EvaluateParams): Promise<EvaluateResponse> {
+  const clean: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "") continue;
+    clean[k] = v as string | number | boolean;
+  }
+  const { data } = await api.get<EvaluateResponse>("/evaluate", {
+    params: clean,
+    timeout: 60000,
   });
   return data;
 }

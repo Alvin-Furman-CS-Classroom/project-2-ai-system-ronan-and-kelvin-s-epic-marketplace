@@ -146,3 +146,50 @@ export interface QueryUnderstandResponse {
   inferred_category: string | null;
   confidence: number;
 }
+
+/** Params accepted by GET /api/evaluate */
+export interface EvaluateParams {
+  q: string;
+  category?: string;
+  k?: number;
+  use_ltr?: boolean;
+  use_query_understanding?: boolean;
+  compare?: boolean;
+  rating_threshold?: number;
+}
+
+/** One ranked item inside an evaluation variant */
+export interface EvaluateRankedItem {
+  rank: number;
+  product: Product;
+  score: number;
+  relevant: boolean;
+}
+
+/** One ablation variant (use_ltr × use_query_understanding) */
+export interface EvaluateVariantResult {
+  label: string;
+  use_ltr: boolean;
+  use_query_understanding: boolean;
+  metrics: {
+    precision_at_k: number;
+    recall_at_k: number;
+    f1_at_k: number;
+    ndcg_at_k: number;
+    reciprocal_rank: number;
+    average_precision: number;
+    [key: string]: number;
+  };
+  items: EvaluateRankedItem[];
+}
+
+/** Response from GET /api/evaluate */
+export interface EvaluateResponse {
+  query: string;
+  category: string | null;
+  k: number;
+  rating_threshold: number;
+  candidate_pool_size: number;
+  relevant_count: number;
+  variants: EvaluateVariantResult[];
+}

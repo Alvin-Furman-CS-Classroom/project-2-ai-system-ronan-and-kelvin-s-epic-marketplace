@@ -34,7 +34,7 @@ export default function SearchBar({ initialQuery = "", compact = false }: Props)
   const navigate = useNavigate();
   const location = useLocation();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { history, addQuery, removeQuery } = useSearchHistory();
 
   useEffect(() => {

@@ -38,6 +38,8 @@ from src.module3.query_understanding import QueryUnderstanding, QueryResult
 from src.module3.embeddings import ProductEmbedder
 from src.module4.pipeline import LearningToRankPipeline
 from src.module4.training_data import TrainingDataGenerator
+from src.module5.holdout import HeldOutSet
+from src.module5.pipeline import EvaluationPipeline
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -52,6 +54,10 @@ deal_finder: Optional[DealFinder] = None
 query_understanding: Optional[QueryUnderstanding] = None
 product_embedder: Optional[ProductEmbedder] = None
 ltr_pipeline: Optional[LearningToRankPipeline] = None
+# Lazily loaded the first time /api/evaluate is hit — building the set of
+# highly-rated product IDs needs the reviews file (~50k rows) which we don't
+# want to parse during startup.
+highly_rated_ids: Optional[frozenset[str]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -718,3 +724,187 @@ async def query_understand(
         "inferred_category": qr.inferred_category,
         "confidence": round(qr.confidence, 4),
     }
+
+
+# ---------------------------------------------------------------------------
+# Module 5: Evaluation endpoint
+# ---------------------------------------------------------------------------
+class EvaluateRankedItem(BaseModel):
+    """One item in the evaluated top-k list."""
+
+    rank: int
+    product: ProductResponse
+    score: float
+    relevant: bool
+
+
+class EvaluateVariantResult(BaseModel):
+    """A single ablation variant (use_ltr × use_query_understanding)."""
+
+    label: str
+    use_ltr: bool
+    use_query_understanding: bool
+    metrics: dict
+    items: List[EvaluateRankedItem]
+
+
+class EvaluateResponse(BaseModel):
+    """Payload returned by GET /api/evaluate."""
+
+    query: str
+    category: Optional[str]
+    k: int
+    rating_threshold: float
+    candidate_pool_size: int
+    relevant_count: int
+    variants: List[EvaluateVariantResult]
+
+
+def _load_highly_rated_ids(threshold: float) -> frozenset[str]:
+    """Lazily parse the working-set reviews file and cache highly-rated IDs.
+
+    A product is considered *positive* if at least one of its reviews has a
+    rating >= ``threshold``. This is the same definition
+    :func:`build_holdout_from_reviews` uses, kept as a cheap lookup set so
+    per-request evaluation doesn't re-parse 50k reviews.
+    """
+    reviews_path = os.path.join(
+        PROJECT_ROOT, "datasets", "working_set", "Electronics_50000.jsonl.gz",
+    )
+    if not os.path.isfile(reviews_path):
+        raise HTTPException(
+            503,
+            f"Reviews file not found at {reviews_path}; cannot build holdout.",
+        )
+    import pandas as pd  # local import — pandas is heavy and only needed here
+
+    df = pd.read_json(reviews_path, lines=True, compression="infer")
+    df = df[["parent_asin", "rating"]].dropna()
+    df["rating"] = df["rating"].astype(float)
+    positive = df.loc[df["rating"] >= threshold, "parent_asin"].astype(str)
+    ids = frozenset(positive.unique().tolist())
+    logger.info(
+        "Loaded %d highly-rated product IDs (rating >= %.1f) from reviews",
+        len(ids),
+        threshold,
+    )
+    return ids
+
+
+@app.get("/api/evaluate", response_model=EvaluateResponse)
+async def evaluate(
+    q: str = Query(..., min_length=1, description="Free-text query to evaluate"),
+    category: Optional[str] = Query(None, description="Category filter for the candidate pool"),
+    k: int = Query(10, ge=1, le=50, description="Top-k cut-off for ranking + metrics"),
+    use_ltr: bool = Query(True, description="Apply Module 4 LTR re-rank"),
+    use_query_understanding: bool = Query(True, description="Include Module 3 features"),
+    compare: bool = Query(False, description="Also run the other 3 ablation variants for comparison"),
+    rating_threshold: float = Query(4.0, ge=1.0, le=5.0, description="Review rating ≥ threshold counts as relevant"),
+):
+    """Run Module 5 evaluation for a single query and return metrics + top-k.
+
+    Ground truth is derived from the working-set reviews: any product with at
+    least one review at ``rating >= rating_threshold`` is considered relevant
+    (capped to the retrieved candidate pool for this query/category).
+
+    When ``compare=True`` the endpoint also runs the three other ablation
+    variants so the UI can show a side-by-side table.
+    """
+    global highly_rated_ids
+
+    if not (catalog and retrieval and ranker and ltr_pipeline):
+        raise HTTPException(503, "Pipeline not ready")
+
+    if highly_rated_ids is None:
+        highly_rated_ids = await asyncio.to_thread(
+            _load_highly_rated_ids, rating_threshold,
+        )
+
+    try:
+        filters = SearchFilters(category=category) if category else SearchFilters()
+    except Exception as exc:
+        raise HTTPException(400, f"Invalid filters: {exc}")
+
+    search_result = retrieval.search(filters)
+    if search_result.count == 0:
+        raise HTTPException(404, f"No candidates for category={category!r}")
+
+    pool_ids = list(search_result.candidate_ids)
+    relevant_in_pool = {pid for pid in pool_ids if pid in highly_rated_ids}
+
+    holdout = HeldOutSet()
+    holdout.add(q, relevant_in_pool)
+
+    pipeline = EvaluationPipeline(
+        catalog=catalog,
+        retrieval=retrieval,
+        ranker=ranker,
+        ltr_pipeline=ltr_pipeline,
+        query_understanding=query_understanding,
+        embedder=product_embedder,
+    )
+
+    if compare:
+        combos = [
+            (True, True),
+            (True, False),
+            (False, True),
+            (False, False),
+        ]
+    else:
+        combos = [(use_ltr, use_query_understanding)]
+
+    def _label(u_ltr: bool, u_qu: bool) -> str:
+        if u_ltr and u_qu:
+            return "LTR + Query Understanding"
+        if u_ltr and not u_qu:
+            return "LTR only (quality features)"
+        if not u_ltr and u_qu:
+            return "Heuristic + Query Understanding"
+        return "Heuristic only (Modules 1+2)"
+
+    variants: List[EvaluateVariantResult] = []
+    for u_ltr, u_qu in combos:
+        result = await asyncio.to_thread(
+            pipeline.evaluate,
+            q,
+            filters,
+            holdout,
+            k,
+            "baseline",
+            use_ltr=u_ltr,
+            use_query_understanding=u_qu,
+        )
+        items: List[EvaluateRankedItem] = []
+        for idx, res in enumerate(result.payload.results, start=1):
+            pid = res["id"]
+            product = catalog.get(pid) if catalog else None
+            if product is None:
+                continue
+            items.append(
+                EvaluateRankedItem(
+                    rank=idx,
+                    product=ProductResponse.from_product(product),
+                    score=float(res["score"]),
+                    relevant=pid in relevant_in_pool,
+                )
+            )
+        variants.append(
+            EvaluateVariantResult(
+                label=_label(u_ltr, u_qu),
+                use_ltr=u_ltr,
+                use_query_understanding=u_qu,
+                metrics={k_: round(float(v), 4) for k_, v in result.metrics.items()},
+                items=items,
+            )
+        )
+
+    return EvaluateResponse(
+        query=q,
+        category=category,
+        k=k,
+        rating_threshold=rating_threshold,
+        candidate_pool_size=len(pool_ids),
+        relevant_count=len(relevant_in_pool),
+        variants=variants,
+    )

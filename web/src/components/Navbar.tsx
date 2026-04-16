@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User } from "lucide-react";
+import { ShoppingCart, User, Target, Scale } from "lucide-react";
 import SearchBar from "./SearchBar";
 
 interface Props {
@@ -30,6 +30,22 @@ export default function Navbar({ query }: Props) {
 
         {/* Right icons */}
         <div className="flex items-center gap-4 shrink-0">
+          <Link
+            to="/compare"
+            title="Module 2 re-ranking comparison"
+            className="hidden md:flex items-center gap-1 text-xs font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-brand)] transition no-underline"
+          >
+            <Scale size={16} />
+            Compare
+          </Link>
+          <Link
+            to="/evaluate"
+            title="Module 5 live evaluation with ablation toggles"
+            className="hidden md:flex items-center gap-1 text-xs font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-brand)] transition no-underline"
+          >
+            <Target size={16} />
+            Evaluate
+          </Link>
           <button className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition">
             <User size={22} />
           </button>
