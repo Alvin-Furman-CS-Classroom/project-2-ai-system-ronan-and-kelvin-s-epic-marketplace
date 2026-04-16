@@ -7,7 +7,8 @@ via stratified ROC AUC and keeps the best (see :mod:`src.module4.model_selection
 Two training paths:
 
 1. **Quality-only** (7 features) — :func:`~src.module4.features.compute_quality_value_features`
-2. **Combined** (11 features) — product quality ∪ Module 3 query–product features via
+2. **Combined** (13 features: 7 quality + 6 query–product) — product quality ∪
+   Module 3 query–product features via
    :func:`~src.module4.query_features.compute_combined_features`, matching
    :class:`~src.module4.training_data.TrainingDataGenerator` output.
 

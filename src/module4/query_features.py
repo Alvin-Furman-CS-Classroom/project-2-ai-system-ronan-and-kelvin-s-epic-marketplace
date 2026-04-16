@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 
 from src.module1.catalog import Product
+from src.module3.accessory_keywords import ACCESSORY_PRODUCT_WORDS
 from src.module3.embeddings import ProductEmbedder, _cosine_similarity
 from src.module3.query_understanding import QueryResult
 from src.module3.tokenizer import tokenize
@@ -53,19 +54,6 @@ def _keyword_overlap(keywords: List[Tuple[str, float]], product: Product) -> flo
     return matched / len(keywords)
 
 
-_ACCESSORY_INDICATORS = frozenset({
-    "bag", "case", "sleeve", "stand", "cover", "protector", "charger",
-    "adapter", "cable", "dock", "hub", "mount", "pad", "mat", "backpack",
-    "skin", "sticker", "decal", "holder", "cooler", "cooling", "fan",
-    "tray", "table", "lock", "strap", "keyboard", "mouse", "compatible",
-    "replacement", "carrying", "pouch", "rack", "bracket", "riser",
-    "organizer", "shelf", "clip", "docking", "converter", "desk",
-    "light", "lamp", "speaker", "pillow", "tote", "purse", "messenger",
-    "satchel", "briefcase", "drive", "battery", "memory", "module",
-    "disk", "dvd", "privacy",
-})
-
-
 def _title_relevance(
     query_tokens: Set[str],
     query_embedding: np.ndarray,
@@ -96,7 +84,7 @@ def _title_relevance(
         for qt in query_tokens
     )
     non_query = title_set - query_tokens
-    if (non_query & _ACCESSORY_INDICATORS) or is_for_query:
+    if (non_query & ACCESSORY_PRODUCT_WORDS) or is_for_query:
         return 0.25 * coverage + 0.15 * title_sim
     return 0.5 * coverage + 0.5 * title_sim
 

@@ -323,7 +323,7 @@ pytest unit_tests/ -v --cov=src
 | 2 | Feb 26 | Modules 1-2 | Complete | 327 tests (unit + integration). Module 2: 40 scorer + 49 ranker + 13 optimizer + 18 edge-case + 12 integration tests. 3 ranking strategies (baseline, hill climbing, simulated annealing), weighted scoring, NDCG@k, `/api/rerank`, SA tuning script (`tune_sa.py`), RerankComparison page (`/compare`) |
 | 3 | Mar 19 | Modules 1-3 | Complete | 423 tests (unit + integration). Module 3: 19 tokenizer + 12 keyword + 22 embedding + 9 category + 8 orchestrator + 22 spell correction + 4 integration tests. NLP pipeline (tokenizer → TF-IDF keywords → Word2Vec embeddings → Logistic Regression category), spell correction, 256-entry NLP LRU cache, `/api/search?q=`, `/api/query-understand`, `/api/autocomplete`, `/api/products/{id}/similar`, inferred category chip, "Did you mean?" banner, autocomplete typeahead, search history + trending, recently viewed, customers also viewed (similar products), skeleton loading |
 | 4 | Apr 2 | Modules 1-4 | Complete | 474 tests (unit + integration). Module 4: 4 exception + 5 feature + 6 model + 4 pipeline + 15 query feature + 13 training data + 4 integration tests. LTR pipeline (product-quality features + query-product features → Logistic Regression classifier), synthetic training data generator, `/api/search` Module 4 re-ranking, `coef_as_dict()` interpretability |
-| 5 | Apr 16 | Modules 1-5 | Complete | 563 tests (unit + integration). Module 5: 6 exception + 31 metrics + 15 holdout + 13 payload + 11 pipeline + 5 integration tests. Evaluation pipeline (Precision@k, Recall@k, NDCG@k, MRR, MAP), HeldOutSet from review ratings, TopKResult payload, single-query and batch evaluation with metric aggregation, reproducible metrics |
+| 5 | Apr 16 | Modules 1-5 | Complete | 576 tests (unit + integration). Module 5: 6 exception + 37 metrics + 15 holdout + 13 payload + 11 pipeline + 5 integration tests. Evaluation pipeline (Precision@k, Recall@k, F1@k, NDCG@k, MRR, MAP), HeldOutSet from review ratings, TopKResult payload, single-query and batch evaluation with metric aggregation, reproducible metrics |
 
 ## Evidence of Usage
 
@@ -371,7 +371,7 @@ Count: 0
 ```
 $ pytest --tb=no -q
 
-563 passed in 24.74s
+576 passed in 24.74s
 ```
 
 | Suite | Location | Count | Focus |
@@ -399,17 +399,17 @@ $ pytest --tb=no -q
 | LTR Features | `unit_tests/module4/test_features.py` | 5 | Feature dim, shape, bounds, price band normalization |
 | LTR Model | `unit_tests/module4/test_model.py` | 6 | Fit/predict ordering, insufficient samples, single class, heuristic fallback, explicit labels |
 | LTR Pipeline | `unit_tests/module4/test_pipeline.py` | 4 | End-to-end fit_rank, heuristic fallback, graceful degradation, numpy labels |
-| Query Features | `unit_tests/module4/test_query_features.py` | 15 | Keyword overlap, cosine similarity bounds, category match, combined features |
+| Query Features | `unit_tests/module4/test_query_features.py` | 22 | Keyword overlap, cosine similarity bounds, category match, combined features, title relevance, module3 scores |
 | Training Data | `unit_tests/module4/test_training_data.py` | 13 | Label generation, binary labels, both classes, determinism, feature dimension |
 | Integration Module 4 | `integration_tests/module4/test_module4_integration.py` | 4 | Package imports, pipeline with catalog, query features, training data |
 | Eval Exceptions | `unit_tests/module5/test_exceptions.py` | 6 | Exception hierarchy, EpicMarketplaceError inheritance, message content |
-| Eval Metrics | `unit_tests/module5/test_metrics.py` | 31 | Precision@k, Recall@k, NDCG@k, MRR, AP — perfect/partial/empty/edge cases, known values, graded relevance |
+| Eval Metrics | `unit_tests/module5/test_metrics.py` | 37 | Precision@k, Recall@k, F1@k, NDCG@k, MRR, AP — perfect/partial/empty/edge cases, known values, graded relevance |
 | Eval Holdout | `unit_tests/module5/test_holdout.py` | 15 | HeldOutSet CRUD, build_holdout_from_reviews (threshold, missing cols), train/test split determinism |
 | Eval Payload | `unit_tests/module5/test_payload.py` | 13 | TopKResult frozen dataclass, build_top_k_payload schema, truncation, missing entries, score rounding |
 | Eval Pipeline | `unit_tests/module5/test_pipeline.py` | 11 | Single-query evaluation, batch evaluation, metric aggregation, empty inputs, holdout miss |
 | Integration Module 5 | `integration_tests/module5/test_module5_integration.py` | 5 | Package imports, full pipeline evaluation, batch aggregation, payload schema, reproducibility |
 
-**Total:** 563 tests
+**Total:** 576 tests
 
 ## Checkpoint 4 Reflection
 

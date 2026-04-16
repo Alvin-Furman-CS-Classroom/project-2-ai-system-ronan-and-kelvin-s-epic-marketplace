@@ -237,7 +237,7 @@ async def lifespan(app: FastAPI):
     # Keep a reference to the embedder for Module 4
     product_embedder = query_understanding._embedder
 
-    # Module 4: train LTR model on synthetic data (11 combined features)
+    # Module 4: train LTR model on synthetic data (13 combined features)
     ltr_pipeline = LearningToRankPipeline()
     try:
         gen = TrainingDataGenerator(

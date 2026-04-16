@@ -13,7 +13,13 @@ class EvaluationError(EpicMarketplaceError):
 
 
 class NoRelevantItemsError(EvaluationError):
-    """Raised when a query has zero relevant items in the held-out set."""
+    """Reserved for strict callers that require at least one relevant label.
+
+    The default :class:`~src.module5.pipeline.EvaluationPipeline` does **not**
+    raise this: IR metrics define sensible behaviour when the relevant set is
+    empty (e.g. recall vacuous truth). Subclass or call sites may use this if
+    they need to fail fast when labels are missing.
+    """
 
 
 class EmptyCandidateError(EvaluationError):

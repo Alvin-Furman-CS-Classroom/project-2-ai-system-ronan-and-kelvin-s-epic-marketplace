@@ -12,7 +12,7 @@ Typical use:
    :func:`~src.module4.query_features.compute_combined_features`.
 4. **Offline training:** ``fit(X=features, labels=y)`` from :class:`TrainingDataGenerator`,
    then ``rank(products, query_result=..., embedder=...)`` at inference when the model
-   is 11-dimensional.
+   is 13-dimensional (7 quality + 6 query–product features).
 """
 
 from __future__ import annotations

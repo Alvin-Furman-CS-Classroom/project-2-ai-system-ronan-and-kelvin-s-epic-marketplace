@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from .accessory_keywords import ACCESSORY_PRODUCT_WORDS
 from .category_inference import CategoryClassifier
 from .embeddings import EMBEDDING_DIM, ProductEmbedder
 from .keywords import KeywordExtractor
@@ -191,18 +192,6 @@ class QueryUnderstanding:
             tfidf_scores[item_id] = float((q_vec @ t_vec.T).toarray()[0, 0])
 
         # Signal 3 — title-specific relevance (penalises accessory titles)
-        _ACCESSORY_WORDS = frozenset({
-            "bag", "case", "sleeve", "stand", "cover", "protector",
-            "charger", "adapter", "cable", "dock", "hub", "mount",
-            "pad", "mat", "backpack", "skin", "sticker", "decal",
-            "holder", "cooler", "cooling", "fan", "tray", "table",
-            "lock", "strap", "keyboard", "mouse", "compatible",
-            "replacement", "carrying", "pouch", "rack", "bracket",
-            "riser", "organizer", "shelf", "clip", "docking", "converter",
-            "desk", "light", "lamp", "speaker", "pillow", "tote",
-            "purse", "messenger", "satchel", "briefcase", "drive",
-            "battery", "memory", "module", "disk", "dvd", "privacy",
-        })
         title_scores: Dict[str, float] = {}
         if titles and query_tokens:
             for item_id in texts:
@@ -231,7 +220,7 @@ class QueryUnderstanding:
                     for qt in query_tokens
                 )
                 non_query = title_set - query_tokens
-                is_accessory = bool(non_query & _ACCESSORY_WORDS) or is_for_query
+                is_accessory = bool(non_query & ACCESSORY_PRODUCT_WORDS) or is_for_query
                 if is_accessory:
                     title_scores[item_id] = 0.15 * coverage + 0.10 * title_tfidf
                 else:
