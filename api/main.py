@@ -54,10 +54,10 @@ deal_finder: Optional[DealFinder] = None
 query_understanding: Optional[QueryUnderstanding] = None
 product_embedder: Optional[ProductEmbedder] = None
 ltr_pipeline: Optional[LearningToRankPipeline] = None
-# Lazily loaded the first time /api/evaluate is hit — building the set of
-# highly-rated product IDs needs the reviews file (~50k rows) which we don't
-# want to parse during startup.
-highly_rated_ids: Optional[frozenset[str]] = None
+# Cache of highly-rated product IDs keyed by rating threshold. Lazily
+# populated the first time a given threshold is requested by /api/evaluate
+# so startup stays fast.
+highly_rated_ids_by_threshold: dict[float, frozenset[str]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -810,15 +810,16 @@ async def evaluate(
     When ``compare=True`` the endpoint also runs the three other ablation
     variants so the UI can show a side-by-side table.
     """
-    global highly_rated_ids
-
     if not (catalog and retrieval and ranker and ltr_pipeline):
         raise HTTPException(503, "Pipeline not ready")
 
+    key = round(float(rating_threshold), 2)
+    highly_rated_ids = highly_rated_ids_by_threshold.get(key)
     if highly_rated_ids is None:
         highly_rated_ids = await asyncio.to_thread(
             _load_highly_rated_ids, rating_threshold,
         )
+        highly_rated_ids_by_threshold[key] = highly_rated_ids
 
     try:
         filters = SearchFilters(category=category) if category else SearchFilters()

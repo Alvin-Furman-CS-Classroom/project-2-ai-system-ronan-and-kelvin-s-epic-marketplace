@@ -120,6 +120,7 @@ export default function EvaluatePage() {
   const [k, setK] = useState(10);
   const [useLtr, setUseLtr] = useState(true);
   const [useQu, setUseQu] = useState(true);
+  const [ratingThreshold, setRatingThreshold] = useState(4.0);
   const [data, setData] = useState<EvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +143,7 @@ export default function EvaluatePage() {
         use_ltr: useLtr,
         use_query_understanding: useQu,
         compare,
+        rating_threshold: ratingThreshold,
       });
       setData(response);
     } catch (err: any) {
@@ -224,6 +226,30 @@ export default function EvaluatePage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Relevance threshold (review rating ≥ …)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={3}
+                max={5}
+                step={0.5}
+                value={ratingThreshold}
+                onChange={(e) => setRatingThreshold(Number(e.target.value))}
+                className="flex-1 accent-[var(--color-brand)]"
+              />
+              <span className="w-10 text-center text-sm font-bold">
+                {ratingThreshold.toFixed(1)}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Higher = stricter ground truth. 5.0 only counts products with a
+              perfect-review as relevant and spreads the metrics out.
+            </p>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">

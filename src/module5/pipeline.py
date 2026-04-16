@@ -32,6 +32,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _neutralise_query_result(qr: "QueryResult") -> "QueryResult":
+    """Return a copy of *qr* with keywords dropped and embedding zeroed.
+
+    Used for the ``use_query_understanding=False`` ablation when the trained
+    LTR model is combined (13-dim): the model still needs a ``QueryResult``
+    object to build features, but zeroing out the NLP signal gives a clean
+    "quality-only at inference" ranking without needing to retrain.
+    """
+    from src.module3.query_understanding import QueryResult
+
+    return QueryResult(
+        keywords=[],
+        query_embedding=np.zeros_like(qr.query_embedding),
+        inferred_category=None,
+        confidence=0.0,
+        corrected_query=None,
+    )
+
+
 @dataclass(frozen=True)
 class EvaluationResult:
     """Output of a single-query evaluation.
@@ -151,16 +170,18 @@ class EvaluationPipeline:
         ]
 
         query_result: Optional[QueryResult] = None
-        if self._qu is not None and use_query_understanding:
+        if self._qu is not None:
             query_result = self._qu.understand(query)
 
         if use_ltr:
-            embed_for_ltr = self._embedder if use_query_understanding else None
+            ltr_query_result = query_result
+            if not use_query_understanding and query_result is not None:
+                ltr_query_result = _neutralise_query_result(query_result)
             final_scores = self._ltr.rank(
                 candidate_products,
                 top_k=k,
-                query_result=query_result,
-                embedder=embed_for_ltr,
+                query_result=ltr_query_result,
+                embedder=self._embedder,
             )
         else:
             final_scores = list(ranked_result.ranked_candidates[:k])
