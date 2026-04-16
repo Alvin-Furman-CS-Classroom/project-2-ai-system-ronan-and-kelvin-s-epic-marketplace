@@ -104,14 +104,17 @@ class EvaluationPipeline:
         holdout: HeldOutSet,
         k: int = 10,
         ranking_strategy: str = "baseline",
+        *,
+        use_ltr: bool = True,
+        use_query_understanding: bool = True,
     ) -> EvaluationResult:
         """Run the full pipeline for one query and compute metrics.
 
         Steps:
             1. Module 1 retrieval (filter candidates).
             2. Module 2 heuristic re-ranking.
-            3. Module 3 query understanding (if available).
-            4. Module 4 LTR scoring.
+            3. Module 3 query understanding (if available and enabled).
+            4. Module 4 LTR scoring (if enabled).
             5. Build top-k payload.
             6. Compute metrics against held-out ground truth.
 
@@ -121,6 +124,9 @@ class EvaluationPipeline:
             holdout: Ground-truth relevance data.
             k: Top-k cut-off for results and metrics.
             ranking_strategy: Module 2 strategy (baseline/hill_climbing/simulated_annealing).
+            use_ltr: If False, keep Module 2 order only (ablation: no Module 4).
+            use_query_understanding: If False, skip NLP features for LTR (ablation: quality-only
+                inference when ``use_ltr`` is True).
 
         Returns:
             :class:`EvaluationResult` with payload and metrics.
@@ -145,15 +151,19 @@ class EvaluationPipeline:
         ]
 
         query_result: Optional[QueryResult] = None
-        if self._qu is not None:
+        if self._qu is not None and use_query_understanding:
             query_result = self._qu.understand(query)
 
-        final_scores = self._ltr.rank(
-            candidate_products,
-            top_k=k,
-            query_result=query_result,
-            embedder=self._embedder,
-        )
+        if use_ltr:
+            embed_for_ltr = self._embedder if use_query_understanding else None
+            final_scores = self._ltr.rank(
+                candidate_products,
+                top_k=k,
+                query_result=query_result,
+                embedder=embed_for_ltr,
+            )
+        else:
+            final_scores = list(ranked_result.ranked_candidates[:k])
 
         ranked_ids = [pid for pid, _ in final_scores]
         relevant_ids = holdout.get_relevant(query)
@@ -180,6 +190,9 @@ class EvaluationPipeline:
         holdout: HeldOutSet,
         k: int = 10,
         ranking_strategy: str = "baseline",
+        *,
+        use_ltr: bool = True,
+        use_query_understanding: bool = True,
     ) -> BatchEvaluationResult:
         """Evaluate multiple queries and aggregate metrics.
 
@@ -188,6 +201,8 @@ class EvaluationPipeline:
             holdout: Ground-truth relevance for all queries.
             k: Top-k cut-off.
             ranking_strategy: Module 2 strategy.
+            use_ltr: If False, Module 2 order only (no Module 4).
+            use_query_understanding: If False, skip query features for LTR when ``use_ltr``.
 
         Returns:
             :class:`BatchEvaluationResult` with per-query and aggregate metrics.
@@ -198,6 +213,8 @@ class EvaluationPipeline:
             result = self.evaluate(
                 query, filters, holdout, k=k,
                 ranking_strategy=ranking_strategy,
+                use_ltr=use_ltr,
+                use_query_understanding=use_query_understanding,
             )
             per_query[query] = result
 

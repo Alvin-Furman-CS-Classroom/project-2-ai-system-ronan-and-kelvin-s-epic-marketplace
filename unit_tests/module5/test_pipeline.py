@@ -125,6 +125,37 @@ class TestEvaluateSingleQuery:
         )
         assert result.metrics["precision_at_k"] == pytest.approx(0.0)
 
+    def test_use_ltr_false_skips_module4_uses_module2_order(self, _catalog, _holdout):
+        """Ablation: Module 4 rank must not run; ordering follows Module 2."""
+        retrieval = MagicMock()
+        retrieval.search.return_value = SearchResult(
+            candidate_ids=["p1", "p2", "p3"],
+            strategy="linear",
+            total_scanned=3,
+            elapsed_ms=0.01,
+        )
+        ranker = MagicMock()
+        ranker.rank.return_value = RankedResult(
+            ranked_candidates=[("p2", 0.9), ("p1", 0.8), ("p3", 0.5)],
+            strategy="baseline",
+            iterations=0,
+            objective_value=1.0,
+            elapsed_ms=0.1,
+        )
+        ltr = MagicMock()
+        ltr.rank.return_value = [("p3", 0.99), ("p2", 0.5), ("p1", 0.1)]
+        pipeline = EvaluationPipeline(
+            catalog=_catalog,
+            retrieval=retrieval,
+            ranker=ranker,
+            ltr_pipeline=ltr,
+        )
+        result = pipeline.evaluate(
+            "test query", SearchFilters(), _holdout, k=3, use_ltr=False,
+        )
+        ltr.rank.assert_not_called()
+        assert result.payload.product_ids[:3] == ["p2", "p1", "p3"]
+
 
 class TestBatchEvaluate:
 
