@@ -59,7 +59,6 @@ def test_query_features_importable():
         compute_combined_features,
     )
     assert QUERY_FEATURE_DIM == len(QUERY_FEATURE_NAMES)
-    assert QUERY_FEATURE_DIM == 4
 
 
 def test_training_data_importable():

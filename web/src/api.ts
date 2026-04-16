@@ -2,10 +2,42 @@
 /* API client — talks to the FastAPI backend                           */
 /* ------------------------------------------------------------------ */
 
-import axios from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type { Category, Product, SearchParams, SearchResponse, DealsResponse, DealInfo, RerankParams, RerankResponse, QueryUnderstandResponse, AutocompleteResponse } from "./types";
 
 const api = axios.create({ baseURL: "/api" });
+
+/** FastAPI trains Word2Vec + LTR on startup (~30–90s); Vite proxy errors until then — retry GETs. */
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_STARTUP_RETRIES = 25;
+const RETRY_DELAY_MS = 2000;
+
+type RetryConfig = InternalAxiosRequestConfig & { __retryCount?: number };
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as RetryConfig | undefined;
+    if (!config || config.method?.toLowerCase() !== "get") {
+      return Promise.reject(error);
+    }
+    const status = error.response?.status;
+    const retryable =
+      !error.response ||
+      RETRYABLE_STATUS.has(status ?? 0) ||
+      error.code === "ERR_NETWORK";
+    if (!retryable) {
+      return Promise.reject(error);
+    }
+    const count = config.__retryCount ?? 0;
+    if (count >= MAX_STARTUP_RETRIES) {
+      return Promise.reject(error);
+    }
+    config.__retryCount = count + 1;
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    return api.request(config);
+  },
+);
 
 /** Healthcheck */
 export async function fetchHealth(): Promise<{ status: string; products: number }> {
