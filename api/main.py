@@ -11,7 +11,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from functools import partial
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -755,9 +755,51 @@ class EvaluateResponse(BaseModel):
     category: Optional[str]
     k: int
     rating_threshold: float
+    ground_truth: str
     candidate_pool_size: int
     relevant_count: int
     variants: List[EvaluateVariantResult]
+
+
+def _query_tokens(q: str) -> List[str]:
+    """Break a query into lower-cased alphanumeric tokens of length ≥ 3."""
+    import re
+
+    tokens = re.findall(r"[a-z0-9]+", q.lower())
+    return [t for t in tokens if len(t) >= 3]
+
+
+def _expand_tokens_via_module3(q: str) -> List[str]:
+    """Return query tokens plus any Module 3 keywords / corrected spellings.
+
+    Using Module 3 here lets the *hybrid* ground truth recognise synonyms and
+    misspellings — e.g. "chargr" → ``charger`` — keeping the topicality check
+    consistent with how the production search route interprets the query.
+    """
+    tokens = set(_query_tokens(q))
+    if query_understanding is None:
+        return sorted(tokens)
+    try:
+        qr = query_understanding.understand(q)
+    except Exception:  # pragma: no cover
+        return sorted(tokens)
+    for kw in qr.keywords:
+        word = kw[0] if isinstance(kw, (list, tuple)) else kw
+        tokens.update(_query_tokens(str(word)))
+    if qr.corrected_query:
+        tokens.update(_query_tokens(qr.corrected_query))
+    return sorted(tokens)
+
+
+def _product_is_on_topic(
+    product_id: str, tokens: Sequence[str],
+) -> bool:
+    """True if the product's title or description contains any query token."""
+    if not tokens or catalog is None or product_id not in catalog:
+        return False
+    p = catalog[product_id]
+    haystack = f"{p.title} {p.description or ''}".lower()
+    return any(tok in haystack for tok in tokens)
 
 
 def _load_highly_rated_ids(threshold: float) -> frozenset[str]:
@@ -800,12 +842,27 @@ async def evaluate(
     use_query_understanding: bool = Query(True, description="Include Module 3 features"),
     compare: bool = Query(False, description="Also run the other 3 ablation variants for comparison"),
     rating_threshold: float = Query(4.0, ge=1.0, le=5.0, description="Review rating ≥ threshold counts as relevant"),
+    ground_truth: str = Query(
+        "reviews",
+        pattern="^(reviews|hybrid)$",
+        description=(
+            "Ground-truth definition. 'reviews' = any product with a review "
+            ">= rating_threshold (quality only). 'hybrid' = that AND the "
+            "product's title/description contains a query keyword "
+            "(quality AND topicality)."
+        ),
+    ),
 ):
     """Run Module 5 evaluation for a single query and return metrics + top-k.
 
     Ground truth is derived from the working-set reviews: any product with at
     least one review at ``rating >= rating_threshold`` is considered relevant
-    (capped to the retrieved candidate pool for this query/category).
+    (capped to the retrieved candidate pool for this query/category). When
+    ``ground_truth='hybrid'`` the relevant set is further narrowed to products
+    whose title or description actually contains a query keyword — this is
+    the recommended mode for demonstrating topical ranking quality because it
+    closes the "high-rated but off-topic" loophole present in pure-review
+    ground truth.
 
     When ``compare=True`` the endpoint also runs the three other ablation
     variants so the UI can show a side-by-side table.
@@ -831,7 +888,15 @@ async def evaluate(
         raise HTTPException(404, f"No candidates for category={category!r}")
 
     pool_ids = list(search_result.candidate_ids)
-    relevant_in_pool = {pid for pid in pool_ids if pid in highly_rated_ids}
+    quality_in_pool = {pid for pid in pool_ids if pid in highly_rated_ids}
+
+    if ground_truth == "hybrid":
+        tokens = _expand_tokens_via_module3(q)
+        relevant_in_pool = {
+            pid for pid in quality_in_pool if _product_is_on_topic(pid, tokens)
+        }
+    else:
+        relevant_in_pool = quality_in_pool
 
     holdout = HeldOutSet()
     holdout.add(q, relevant_in_pool)
@@ -905,6 +970,7 @@ async def evaluate(
         category=category,
         k=k,
         rating_threshold=rating_threshold,
+        ground_truth=ground_truth,
         candidate_pool_size=len(pool_ids),
         relevant_count=len(relevant_in_pool),
         variants=variants,

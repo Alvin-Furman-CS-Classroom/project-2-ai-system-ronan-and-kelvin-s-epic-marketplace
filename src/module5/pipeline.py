@@ -173,16 +173,55 @@ class EvaluationPipeline:
         if self._qu is not None:
             query_result = self._qu.understand(query)
 
+        # Module 3 text-rank pass: when QU is on, reorder candidates by
+        # semantic + lexical relevance to the query (mirrors /api/search).
+        module3_scores: Optional[Dict[str, float]] = None
+        module3_ranked: Optional[List[Tuple[str, float]]] = None
+        if (
+            use_query_understanding
+            and self._qu is not None
+            and candidate_products
+            and query.strip()
+        ):
+            texts = {
+                p.id: f"{p.title} {p.description or ''}"
+                for p in candidate_products
+            }
+            titles = {p.id: p.title for p in candidate_products}
+            module3_ranked = self._qu.search_by_text(
+                query, texts, top_k=len(candidate_products), titles=titles,
+            )
+            order = {pid: i for i, (pid, _) in enumerate(module3_ranked)}
+            candidate_products.sort(key=lambda p: order.get(p.id, len(order)))
+            module3_scores = {pid: score for pid, score in module3_ranked}
+
         if use_ltr:
             ltr_query_result = query_result
             if not use_query_understanding and query_result is not None:
                 ltr_query_result = _neutralise_query_result(query_result)
-            final_scores = self._ltr.rank(
+            ltr_scored = self._ltr.rank(
                 candidate_products,
-                top_k=k,
+                top_k=None,
                 query_result=ltr_query_result,
                 embedder=self._embedder,
+                module3_scores=module3_scores,
             )
+            # When Module 3 ran, blend its relevance into the LTR score —
+            # same 0.55 / 0.45 mix the production /api/search route uses.
+            if module3_scores:
+                blended = [
+                    (
+                        pid,
+                        0.55 * module3_scores.get(pid, 0.0) + 0.45 * score,
+                    )
+                    for pid, score in ltr_scored
+                ]
+                blended.sort(key=lambda x: x[1], reverse=True)
+                final_scores = blended[:k]
+            else:
+                final_scores = ltr_scored[:k]
+        elif module3_ranked is not None:
+            final_scores = list(module3_ranked[:k])
         else:
             final_scores = list(ranked_result.ranked_candidates[:k])
 

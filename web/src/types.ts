@@ -147,6 +147,8 @@ export interface QueryUnderstandResponse {
   confidence: number;
 }
 
+export type GroundTruthMode = "reviews" | "hybrid";
+
 /** Params accepted by GET /api/evaluate */
 export interface EvaluateParams {
   q: string;
@@ -156,6 +158,7 @@ export interface EvaluateParams {
   use_query_understanding?: boolean;
   compare?: boolean;
   rating_threshold?: number;
+  ground_truth?: GroundTruthMode;
 }
 
 /** One ranked item inside an evaluation variant */
@@ -189,6 +192,7 @@ export interface EvaluateResponse {
   category: string | null;
   k: number;
   rating_threshold: number;
+  ground_truth: GroundTruthMode;
   candidate_pool_size: number;
   relevant_count: number;
   variants: EvaluateVariantResult[];

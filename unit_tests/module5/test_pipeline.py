@@ -125,6 +125,86 @@ class TestEvaluateSingleQuery:
         )
         assert result.metrics["precision_at_k"] == pytest.approx(0.0)
 
+    def test_qu_on_without_ltr_reorders_by_module3_text_rank(
+        self, _catalog, _holdout,
+    ):
+        """Ablation: QU on + LTR off must reorder candidates via Module 3."""
+        retrieval = MagicMock()
+        retrieval.search.return_value = SearchResult(
+            candidate_ids=["p1", "p2", "p3"],
+            strategy="linear",
+            total_scanned=3,
+            elapsed_ms=0.01,
+        )
+        ranker = MagicMock()
+        ranker.rank.return_value = RankedResult(
+            ranked_candidates=[("p1", 0.9), ("p2", 0.7), ("p3", 0.5)],
+            strategy="baseline",
+            iterations=0,
+            objective_value=1.0,
+            elapsed_ms=0.1,
+        )
+        ltr = MagicMock()
+        qu = MagicMock()
+        qu.understand.return_value = MagicMock()
+        qu.search_by_text.return_value = [
+            ("p3", 0.95),
+            ("p2", 0.8),
+            ("p1", 0.1),
+        ]
+        pipeline = EvaluationPipeline(
+            catalog=_catalog,
+            retrieval=retrieval,
+            ranker=ranker,
+            ltr_pipeline=ltr,
+            query_understanding=qu,
+        )
+        result = pipeline.evaluate(
+            "test query", SearchFilters(), _holdout, k=3,
+            use_ltr=False,
+            use_query_understanding=True,
+        )
+        qu.search_by_text.assert_called_once()
+        ltr.rank.assert_not_called()
+        assert result.payload.product_ids[:3] == ["p3", "p2", "p1"]
+
+    def test_qu_off_without_ltr_keeps_module2_order(self, _catalog, _holdout):
+        """Toggling QU off (and LTR off) must skip Module 3 and keep M2 order."""
+        retrieval = MagicMock()
+        retrieval.search.return_value = SearchResult(
+            candidate_ids=["p1", "p2", "p3"],
+            strategy="linear",
+            total_scanned=3,
+            elapsed_ms=0.01,
+        )
+        ranker = MagicMock()
+        ranker.rank.return_value = RankedResult(
+            ranked_candidates=[("p1", 0.9), ("p2", 0.7), ("p3", 0.5)],
+            strategy="baseline",
+            iterations=0,
+            objective_value=1.0,
+            elapsed_ms=0.1,
+        )
+        ltr = MagicMock()
+        qu = MagicMock()
+        qu.understand.return_value = MagicMock()
+        qu.search_by_text.return_value = [("p3", 0.95), ("p2", 0.8), ("p1", 0.1)]
+        pipeline = EvaluationPipeline(
+            catalog=_catalog,
+            retrieval=retrieval,
+            ranker=ranker,
+            ltr_pipeline=ltr,
+            query_understanding=qu,
+        )
+        result = pipeline.evaluate(
+            "test query", SearchFilters(), _holdout, k=3,
+            use_ltr=False,
+            use_query_understanding=False,
+        )
+        qu.search_by_text.assert_not_called()
+        ltr.rank.assert_not_called()
+        assert result.payload.product_ids[:3] == ["p1", "p2", "p3"]
+
     def test_use_ltr_false_skips_module4_uses_module2_order(self, _catalog, _holdout):
         """Ablation: Module 4 rank must not run; ordering follows Module 2."""
         retrieval = MagicMock()

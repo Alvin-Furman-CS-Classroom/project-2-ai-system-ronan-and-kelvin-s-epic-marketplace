@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Loader2, Target, CheckCircle2, XCircle, Play, Scale } from "lucide-react";
 import { fetchCategories, fetchEvaluate } from "../api";
-import type { Category, EvaluateResponse, EvaluateVariantResult } from "../types";
+import type {
+  Category,
+  EvaluateResponse,
+  EvaluateVariantResult,
+  GroundTruthMode,
+} from "../types";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
@@ -27,12 +32,29 @@ function MetricBadge({ label, value }: { label: string; value: number }) {
   );
 }
 
+function queryTokens(q: string): string[] {
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/[^a-z0-9]/g, ""))
+    .filter((t) => t.length >= 3);
+}
+
+function titleMatchesQuery(title: string, tokens: string[]): boolean {
+  if (!tokens.length) return false;
+  const t = title.toLowerCase();
+  return tokens.some((tok) => t.includes(tok));
+}
+
 function RankedItemRow({
-  rank,
-  product,
-  score,
-  relevant,
-}: EvaluateVariantResult["items"][number]) {
+  item,
+  tokens,
+}: {
+  item: EvaluateVariantResult["items"][number];
+  tokens: string[];
+}) {
+  const { rank, product, score, relevant } = item;
+  const isMatch = titleMatchesQuery(product.title, tokens);
   return (
     <div
       className={`flex items-center gap-3 rounded-lg border p-2.5 ${
@@ -57,8 +79,25 @@ function RankedItemRow({
         <p className="truncate text-sm font-medium leading-tight">
           {product.title}
         </p>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          ${product.price.toFixed(2)} · {product.seller_rating.toFixed(1)}★
+        <p className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+          <span>
+            ${product.price.toFixed(2)} · {product.seller_rating.toFixed(1)}★
+          </span>
+          {isMatch ? (
+            <span
+              title="Product title contains a query keyword (semantic match)"
+              className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700"
+            >
+              match
+            </span>
+          ) : (
+            <span
+              title="Product title does NOT contain the query — relevance here is review-driven only"
+              className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500"
+            >
+              off-topic
+            </span>
+          )}
         </p>
       </div>
       <div className="shrink-0 text-right">
@@ -78,17 +117,53 @@ function RankedItemRow({
   );
 }
 
-function VariantCard({ variant }: { variant: EvaluateVariantResult }) {
+function VariantCard({
+  variant,
+  tokens,
+}: {
+  variant: EvaluateVariantResult;
+  tokens: string[];
+}) {
+  const matchCount = variant.items.filter((it) =>
+    titleMatchesQuery(it.product.title, tokens),
+  ).length;
+  const matchRate = variant.items.length
+    ? matchCount / variant.items.length
+    : 0;
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-white">
       <div className="border-b border-[var(--color-border)] bg-gray-50 px-4 py-3">
-        <h3 className="text-sm font-bold text-[var(--color-text)]">
-          {variant.label}
-        </h3>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          LTR: <b>{variant.use_ltr ? "on" : "off"}</b> · Query Understanding:{" "}
-          <b>{variant.use_query_understanding ? "on" : "off"}</b>
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-[var(--color-text)]">
+              {variant.label}
+            </h3>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              LTR: <b>{variant.use_ltr ? "on" : "off"}</b> · Query
+              Understanding:{" "}
+              <b>{variant.use_query_understanding ? "on" : "off"}</b>
+            </p>
+          </div>
+          {tokens.length > 0 && (
+            <div
+              title="Share of top-k whose title actually contains a query keyword — semantic topicality, independent of review ratings."
+              className={`shrink-0 rounded-md border px-2 py-1 text-center ${
+                matchRate >= 0.7
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : matchRate >= 0.3
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-gray-200 bg-gray-50 text-gray-500"
+              }`}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider">
+                On-topic
+              </p>
+              <p className="text-sm font-bold">
+                {matchCount}/{variant.items.length}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-6">
         {METRIC_KEYS.map((m) => (
@@ -101,7 +176,11 @@ function VariantCard({ variant }: { variant: EvaluateVariantResult }) {
       </div>
       <div className="space-y-2 p-3 pt-0">
         {variant.items.map((item) => (
-          <RankedItemRow key={`${item.product.id}-${item.rank}`} {...item} />
+          <RankedItemRow
+            key={`${item.product.id}-${item.rank}`}
+            item={item}
+            tokens={tokens}
+          />
         ))}
         {variant.items.length === 0 && (
           <p className="py-6 text-center text-sm text-gray-400">
@@ -121,6 +200,7 @@ export default function EvaluatePage() {
   const [useLtr, setUseLtr] = useState(true);
   const [useQu, setUseQu] = useState(true);
   const [ratingThreshold, setRatingThreshold] = useState(4.0);
+  const [groundTruth, setGroundTruth] = useState<GroundTruthMode>("hybrid");
   const [data, setData] = useState<EvaluateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,11 +224,13 @@ export default function EvaluatePage() {
         use_query_understanding: useQu,
         compare,
         rating_threshold: ratingThreshold,
+        ground_truth: groundTruth,
       });
       setData(response);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
       const detail =
-        err?.response?.data?.detail ?? err?.message ?? "Evaluation failed";
+        e?.response?.data?.detail ?? e?.message ?? "Evaluation failed";
       setError(String(detail));
       setData(null);
     } finally {
@@ -169,11 +251,14 @@ export default function EvaluatePage() {
         </div>
         <p className="mb-6 max-w-3xl text-sm text-[var(--color-text-muted)]">
           Run a query through the full pipeline and measure the ranking
-          against review-derived ground truth (a product is relevant when it
-          has a review with rating ≥ 4 stars). Flip the toggles to run an
-          ablation — for example turn <b>LTR</b> off to see Modules 1+2 alone,
-          or keep LTR on but switch off <b>Query Understanding</b> to measure
-          how much the NLP features contribute. Green rows are relevant hits.
+          against ground-truth relevance. The <b>ground-truth</b> dropdown
+          controls what "relevant" means: <i>reviews</i> counts any product
+          with a review ≥ the threshold (quality only — intentionally loose,
+          to show how review ratings saturate the metric), while <i>hybrid</i>
+          also requires the product's title/description to actually contain
+          a query keyword (quality AND topicality — the honest metric). Flip
+          the toggles to run an ablation, and watch how the LTR + Query
+          Understanding variant wins under hybrid ground truth.
         </p>
 
         {/* Controls */}
@@ -228,28 +313,55 @@ export default function EvaluatePage() {
             </div>
           </div>
 
-          <div className="mt-4">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-              Relevance threshold (review rating ≥ …)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={3}
-                max={5}
-                step={0.5}
-                value={ratingThreshold}
-                onChange={(e) => setRatingThreshold(Number(e.target.value))}
-                className="flex-1 accent-[var(--color-brand)]"
-              />
-              <span className="w-10 text-center text-sm font-bold">
-                {ratingThreshold.toFixed(1)}
-              </span>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                Ground truth
+              </label>
+              <select
+                value={groundTruth}
+                onChange={(e) =>
+                  setGroundTruth(e.target.value as GroundTruthMode)
+                }
+                className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
+              >
+                <option value="hybrid">
+                  hybrid — rating ≥ threshold AND on-topic (recommended)
+                </option>
+                <option value="reviews">
+                  reviews — rating ≥ threshold only (loose / saturated)
+                </option>
+              </select>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                <b>hybrid</b> is the honest metric — it rewards pipelines that
+                return the right <i>topic</i>, not just any highly-rated item.
+              </p>
             </div>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              Higher = stricter ground truth. 5.0 only counts products with a
-              perfect-review as relevant and spreads the metrics out.
-            </p>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                Rating threshold (≥ …)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={3}
+                  max={5}
+                  step={0.5}
+                  value={ratingThreshold}
+                  onChange={(e) =>
+                    setRatingThreshold(Number(e.target.value))
+                  }
+                  className="flex-1 accent-[var(--color-brand)]"
+                />
+                <span className="w-10 text-center text-sm font-bold">
+                  {ratingThreshold.toFixed(1)}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Higher = stricter quality bar. 5.0 only counts products with a
+                perfect-review as relevant.
+              </p>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -312,13 +424,28 @@ export default function EvaluatePage() {
                 <b className="text-[var(--color-text)]">"{data.query}"</b>
               </span>
               <span>
+                Ground truth:{" "}
+                <b
+                  className={
+                    data.ground_truth === "hybrid"
+                      ? "text-green-700"
+                      : "text-amber-700"
+                  }
+                >
+                  {data.ground_truth}
+                </b>
+                {data.ground_truth === "hybrid"
+                  ? " (rating ≥ threshold AND on-topic)"
+                  : " (rating ≥ threshold only)"}
+              </span>
+              <span>
                 Candidate pool:{" "}
                 <b className="text-[var(--color-text)]">
                   {data.candidate_pool_size.toLocaleString()}
                 </b>
               </span>
               <span>
-                Relevant in pool (rating ≥ {data.rating_threshold}):{" "}
+                Relevant in pool:{" "}
                 <b className="text-[var(--color-text)]">
                   {data.relevant_count.toLocaleString()}
                 </b>
@@ -342,22 +469,37 @@ export default function EvaluatePage() {
                           {m.label}
                         </th>
                       ))}
+                      <th
+                        className="px-3 py-2"
+                        title="Share of top-k whose title actually contains a query keyword."
+                      >
+                        On-topic
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.variants.map((v) => (
-                      <tr
-                        key={v.label}
-                        className="border-b border-[var(--color-border)] last:border-0"
-                      >
-                        <td className="px-3 py-2 font-medium">{v.label}</td>
-                        {METRIC_KEYS.map((m) => (
-                          <td key={m.key} className="px-3 py-2">
-                            {(v.metrics[m.key] ?? 0).toFixed(3)}
+                    {data.variants.map((v) => {
+                      const toks = queryTokens(data.query);
+                      const mc = v.items.filter((it) =>
+                        titleMatchesQuery(it.product.title, toks),
+                      ).length;
+                      return (
+                        <tr
+                          key={v.label}
+                          className="border-b border-[var(--color-border)] last:border-0"
+                        >
+                          <td className="px-3 py-2 font-medium">{v.label}</td>
+                          {METRIC_KEYS.map((m) => (
+                            <td key={m.key} className="px-3 py-2">
+                              {(v.metrics[m.key] ?? 0).toFixed(3)}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 font-semibold">
+                            {mc}/{v.items.length}
                           </td>
-                        ))}
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -371,7 +513,11 @@ export default function EvaluatePage() {
               }`}
             >
               {data.variants.map((v) => (
-                <VariantCard key={v.label} variant={v} />
+                <VariantCard
+                  key={v.label}
+                  variant={v}
+                  tokens={queryTokens(data.query)}
+                />
               ))}
             </div>
           </>
