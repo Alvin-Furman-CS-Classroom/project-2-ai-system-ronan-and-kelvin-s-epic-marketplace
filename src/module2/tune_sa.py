@@ -37,7 +37,7 @@ def _load_catalog(max_products: int | None = 500) -> ProductCatalog:
     if not working_set.is_dir():
         raise FileNotFoundError(
             f"Working set not found at {working_set}. "
-            "Ensure datasets/working_set/ exists with meta_Electronics_50000.jsonl.gz."
+            "Ensure datasets/working_set/ exists with a meta_Electronics JSONL file."
         )
     return load_catalog_from_working_set(
         working_set_dir=str(working_set), max_products=max_products

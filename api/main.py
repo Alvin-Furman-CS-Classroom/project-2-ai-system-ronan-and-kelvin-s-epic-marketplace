@@ -810,13 +810,17 @@ def _load_highly_rated_ids(threshold: float) -> frozenset[str]:
     :func:`build_holdout_from_reviews` uses, kept as a cheap lookup set so
     per-request evaluation doesn't re-parse 50k reviews.
     """
-    reviews_path = os.path.join(
-        PROJECT_ROOT, "datasets", "working_set", "Electronics_50000.jsonl.gz",
-    )
-    if not os.path.isfile(reviews_path):
+    ws_dir = os.path.join(PROJECT_ROOT, "datasets", "working_set")
+    reviews_path = None
+    for name in ("Electronics_200k.jsonl.gz", "Electronics.jsonl.gz", "Electronics_50000.jsonl.gz"):
+        candidate = os.path.join(ws_dir, name)
+        if os.path.isfile(candidate):
+            reviews_path = candidate
+            break
+    if reviews_path is None:
         raise HTTPException(
             503,
-            f"Reviews file not found at {reviews_path}; cannot build holdout.",
+            f"Reviews file not found in {ws_dir}; cannot build holdout.",
         )
     import pandas as pd  # local import — pandas is heavy and only needed here
 

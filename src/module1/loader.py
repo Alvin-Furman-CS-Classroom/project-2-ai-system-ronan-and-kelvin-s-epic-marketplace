@@ -100,6 +100,37 @@ def load_catalog(
     return catalog
 
 
+_META_CANDIDATES = (
+    "meta_Electronics_200k.jsonl.gz",
+    "meta_Electronics.jsonl.gz",
+    "meta_Electronics_50000.jsonl.gz",
+)
+_REVIEWS_CANDIDATES = (
+    "Electronics_200k.jsonl.gz",
+    "Electronics.jsonl.gz",
+    "Electronics_50000.jsonl.gz",
+)
+
+
+def _resolve_electronics_paths(working_set_dir: Path) -> tuple[Path, Path]:
+    """Pick the first metadata/reviews file that exists on disk."""
+    meta_path = working_set_dir / _META_CANDIDATES[0]
+    for name in _META_CANDIDATES:
+        candidate = working_set_dir / name
+        if candidate.exists():
+            meta_path = candidate
+            break
+
+    reviews_path = working_set_dir / _REVIEWS_CANDIDATES[0]
+    for name in _REVIEWS_CANDIDATES:
+        candidate = working_set_dir / name
+        if candidate.exists():
+            reviews_path = candidate
+            break
+
+    return meta_path, reviews_path
+
+
 def load_catalog_from_working_set(
     working_set_dir: Optional[str | Path] = None,
     max_products: Optional[int] = None,
@@ -121,8 +152,7 @@ def load_catalog_from_working_set(
     else:
         working_set_dir = Path(working_set_dir)
     
-    meta_path = working_set_dir / "meta_Electronics_50000.jsonl.gz"
-    reviews_path = working_set_dir / "Electronics_50000.jsonl.gz"
+    meta_path, reviews_path = _resolve_electronics_paths(working_set_dir)
     
     if not meta_path.exists():
         raise FileNotFoundError(f"Metadata file not found: {meta_path}")

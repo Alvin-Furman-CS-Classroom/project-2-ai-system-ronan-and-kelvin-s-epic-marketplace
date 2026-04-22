@@ -218,7 +218,7 @@ def main() -> None:
     parser.add_argument(
         "--working-set",
         default=os.path.join(PROJECT_ROOT, "datasets", "working_set"),
-        help="Directory with meta_Electronics_50000.jsonl.gz and Electronics_50000.jsonl.gz",
+        help="Directory with Electronics and meta_Electronics JSONL files",
     )
     parser.add_argument(
         "--max-products",
@@ -291,9 +291,14 @@ def main() -> None:
     from src.module5.holdout import build_holdout_from_reviews
     from src.module5.pipeline import EvaluationPipeline
 
-    reviews_path = os.path.join(ws, "Electronics_50000.jsonl.gz")
-    if not os.path.isfile(reviews_path):
-        raise SystemExit(f"Reviews file missing: {reviews_path}")
+    reviews_path = None
+    for name in ("Electronics_200k.jsonl.gz", "Electronics.jsonl.gz", "Electronics_50000.jsonl.gz"):
+        candidate = os.path.join(ws, name)
+        if os.path.isfile(candidate):
+            reviews_path = candidate
+            break
+    if reviews_path is None:
+        raise SystemExit(f"Reviews file missing in {ws}")
 
     logger.info("Loading catalog from %s …", ws)
     catalog = load_catalog_from_working_set(ws, max_products=args.max_products)

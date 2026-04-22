@@ -189,7 +189,9 @@ class TestLoadCatalogFromWorkingSet:
 
         repo_root = Path(__file__).resolve().parents[2]
         working_set = repo_root / "datasets" / "working_set"
-        if not (working_set / "meta_Electronics_50000.jsonl.gz").exists():
+        from src.module1.loader import _resolve_electronics_paths
+        meta_path, _ = _resolve_electronics_paths(working_set)
+        if not meta_path.exists():
             pytest.skip("Working set metadata not found")
 
         catalog = load_catalog_from_working_set(working_set_dir=working_set, max_products=10)
